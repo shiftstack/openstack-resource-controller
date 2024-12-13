@@ -6,6 +6,9 @@ on:
     paths:
       - .github/labels.yaml
       - .github/workflows/ensure-labels.yaml
+permissions:
+  pull-requests: write
+
 jobs:
   ensure:
     runs-on: ubuntu-latest
