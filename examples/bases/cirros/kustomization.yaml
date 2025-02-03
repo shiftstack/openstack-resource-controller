@@ -15,6 +15,7 @@ secretGenerator:
 
 resources:
 - ../cirros-image
+- provider-network.yaml
 - flavor.yaml
 - port.yaml
 - securitygroup.yaml

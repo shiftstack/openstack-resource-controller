@@ -8,7 +8,7 @@ spec:
     cloudName: openstack
     secretName: cloud-config
   managementPolicy: managed
-  networkRef: external-network
+  networkRef: provider-network
   resource:
     tags:
     - orc-test
@@ -16,4 +16,5 @@ spec:
     - allow-ssh
     - devstack
     addresses:
-    - subnetRef: external-subnet-ipv4
+    - subnetRef: provider-subnet-ipv4
+    - subnetRef: provider-subnet-ipv6

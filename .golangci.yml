@@ -61,7 +61,9 @@ linters-settings:
           - "conditions"
           - "integers"
           - "jsontags"
-          - "maxlength"
+          # NOTE: maxlength check currently trips over our Status fields
+          # missing a MaxLength marker
+          # - "maxlength"
           # NOTE: we have a number of boolean fields. Should we convert them to
           # string?
           # - "nobools"

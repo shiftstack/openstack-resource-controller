@@ -7,4 +7,4 @@ components:
 
 resources:
 - ../../bases/devstack
-- ../../bases/local-config-ref
+- ../../bases/credentials-reference

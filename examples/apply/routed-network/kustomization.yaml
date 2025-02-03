@@ -7,4 +7,4 @@ components:
 
 resources:
 - ../../bases/routed-network
-- ../../bases/local-config-ref
+- ../../bases/credentials-reference
