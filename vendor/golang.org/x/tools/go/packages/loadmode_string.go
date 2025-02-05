@@ -23,7 +23,6 @@ var modes = [...]struct {
 	{NeedSyntax, "NeedSyntax"},
 	{NeedTypesInfo, "NeedTypesInfo"},
 	{NeedTypesSizes, "NeedTypesSizes"},
-	{NeedForTest, "NeedForTest"},
 	{NeedModule, "NeedModule"},
 	{NeedEmbedFiles, "NeedEmbedFiles"},
 	{NeedEmbedPatterns, "NeedEmbedPatterns"},

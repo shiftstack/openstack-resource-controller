@@ -19,36 +19,30 @@ package image
 import (
 	"context"
 	"fmt"
-	"iter"
 	"reflect"
 	"slices"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
 	"github.com/k-orc/openstack-resource-controller/internal/controllers/generic"
 	"github.com/k-orc/openstack-resource-controller/internal/osclients"
+	"github.com/k-orc/openstack-resource-controller/internal/scope"
 	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
 )
 
-type (
-	osResourceT = images.Image
-
-	createResourceActuator = generic.CreateResourceActuator[orcObjectPT, orcObjectT, filterT, osResourceT]
-	deleteResourceActuator = generic.DeleteResourceActuator[orcObjectPT, orcObjectT, osResourceT]
-	imageIterator          = iter.Seq2[*osResourceT, error]
-)
-
 type imageActuator struct {
+	*orcv1alpha1.Image
 	osClient osclients.ImageClient
 }
 
-func newActuator(ctx context.Context, controller generic.ResourceController, orcObject *orcv1alpha1.Image) (imageActuator, error) {
+func newActuator(ctx context.Context, k8sClient client.Client, scopeFactory scope.Factory, orcObject *orcv1alpha1.Image) (imageActuator, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	clientScope, err := controller.GetScopeFactory().NewClientScopeFromObject(ctx, controller.GetK8sClient(), log, orcObject)
+	clientScope, err := scopeFactory.NewClientScopeFromObject(ctx, k8sClient, log, orcObject)
 	if err != nil {
 		return imageActuator{}, err
 	}
@@ -58,36 +52,70 @@ func newActuator(ctx context.Context, controller generic.ResourceController, orc
 	}
 
 	return imageActuator{
+		Image:    orcObject,
 		osClient: osClient,
 	}, nil
 }
 
-var _ createResourceActuator = imageActuator{}
-var _ deleteResourceActuator = imageActuator{}
+var _ generic.CreateResourceActuator[*images.Image] = imageActuator{}
+var _ generic.DeleteResourceActuator[*images.Image] = imageActuator{}
 
-func (imageActuator) GetResourceID(osResource *images.Image) string {
+func (obj imageActuator) GetManagementPolicy() orcv1alpha1.ManagementPolicy {
+	return obj.Spec.ManagementPolicy
+}
+
+func (obj imageActuator) GetManagedOptions() *orcv1alpha1.ManagedOptions {
+	return obj.Spec.ManagedOptions
+}
+
+func (obj imageActuator) GetResourceID(osResource *images.Image) string {
 	return osResource.ID
 }
 
-func (actuator imageActuator) GetOSResourceByID(ctx context.Context, id string) (*images.Image, error) {
-	return actuator.osClient.GetImage(ctx, id)
-}
-
-func (actuator imageActuator) ListOSResourcesForAdoption(ctx context.Context, obj orcObjectPT) (imageIterator, bool) {
-	if obj.Spec.Resource == nil {
-		return nil, false
+func (obj imageActuator) GetOSResourceByStatusID(ctx context.Context) (bool, *images.Image, error) {
+	if obj.Status.ID == nil {
+		return false, nil, nil
 	}
 
-	listOpts := images.ListOpts{Name: string(getResourceName(obj))}
-	return actuator.osClient.ListImages(ctx, listOpts), true
+	image, err := obj.osClient.GetImage(*obj.Status.ID)
+	return true, image, err
 }
 
-func (actuator imageActuator) ListOSResourcesForImport(ctx context.Context, filter filterT) imageIterator {
-	listOpts := images.ListOpts{Name: string(ptr.Deref(filter.Name, ""))}
-	return actuator.osClient.ListImages(ctx, listOpts)
+func (obj imageActuator) GetOSResourceBySpec(ctx context.Context) (*images.Image, error) {
+	if obj.Spec.Resource == nil {
+		return nil, nil
+	}
+	listOpts := listOptsFromCreation(obj.Image)
+	image, err := getGlanceImageFromList(ctx, listOpts, obj.osClient)
+	return image, err
 }
 
-func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Image) ([]generic.ProgressStatus, *images.Image, error) {
+func (obj imageActuator) GetOSResourceByImportID(ctx context.Context) (bool, *images.Image, error) {
+	if obj.Spec.Import == nil {
+		return false, nil, nil
+	}
+	if obj.Spec.Import.ID == nil {
+		return false, nil, nil
+	}
+
+	image, err := obj.osClient.GetImage(*obj.Spec.Import.ID)
+	return true, image, err
+}
+
+func (obj imageActuator) GetOSResourceByImportFilter(ctx context.Context) (bool, *images.Image, error) {
+	if obj.Spec.Import == nil {
+		return false, nil, nil
+	}
+	if obj.Spec.Import.Filter == nil {
+		return false, nil, nil
+	}
+
+	listOpts := listOptsFromImportFilter(obj.Spec.Import.Filter)
+	image, err := getGlanceImageFromList(ctx, listOpts, obj.osClient)
+	return true, image, err
+}
+
+func (obj imageActuator) CreateResource(ctx context.Context) ([]generic.WaitingOnEvent, *images.Image, error) {
 	resource := obj.Spec.Resource
 	if resource == nil {
 		// Should have been caught by API validation
@@ -111,10 +139,10 @@ func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alph
 	additionalProperties := map[string]string{}
 	if properties != nil {
 		if properties.MinDiskGB != nil {
-			minDisk = int(*properties.MinDiskGB)
+			minDisk = *properties.MinDiskGB
 		}
 		if properties.MinMemoryMB != nil {
-			minMemory = int(*properties.MinMemoryMB)
+			minMemory = *properties.MinMemoryMB
 		}
 
 		if err := glancePropertiesFromStruct(properties.Hardware, additionalProperties); err != nil {
@@ -127,8 +155,8 @@ func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alph
 		visibility = ptr.To(images.ImageVisibility(*resource.Visibility))
 	}
 
-	image, err := actuator.osClient.CreateImage(ctx, &images.CreateOpts{
-		Name:            string(getResourceName(obj)),
+	image, err := obj.osClient.CreateImage(ctx, &images.CreateOpts{
+		Name:            string(getResourceName(obj.Image)),
 		Visibility:      visibility,
 		Tags:            tags,
 		ContainerFormat: string(resource.Content.ContainerFormat),
@@ -147,8 +175,47 @@ func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alph
 	return nil, image, err
 }
 
-func (actuator imageActuator) DeleteResource(ctx context.Context, _ orcObjectPT, osResource *images.Image) ([]generic.ProgressStatus, error) {
-	return nil, actuator.osClient.DeleteImage(ctx, osResource.ID)
+func (obj imageActuator) DeleteResource(ctx context.Context, osResource *images.Image) ([]generic.WaitingOnEvent, error) {
+	return nil, obj.osClient.DeleteImage(ctx, osResource.ID)
+}
+
+// getResourceName returns the name of the glance image we should use.
+func getResourceName(orcImage *orcv1alpha1.Image) orcv1alpha1.OpenStackName {
+	if orcImage.Spec.Resource.Name != nil {
+		return *orcImage.Spec.Resource.Name
+	}
+	return orcv1alpha1.OpenStackName(orcImage.Name)
+}
+
+func listOptsFromImportFilter(filter *orcv1alpha1.ImageFilter) images.ListOptsBuilder {
+	return images.ListOpts{Name: ptr.Deref(filter.Name, "")}
+}
+
+// listOptsFromCreation returns a listOpts which will return the image which
+// would have been created from the current spec and hopefully no other image.
+// Its purpose is to automatically adopt an image that we created but failed to
+// write to status.id.
+func listOptsFromCreation(orcImage *orcv1alpha1.Image) images.ListOptsBuilder {
+	return images.ListOpts{Name: string(getResourceName(orcImage))}
+}
+
+func getGlanceImageFromList(_ context.Context, listOpts images.ListOptsBuilder, imageClient osclients.ImageClient) (*images.Image, error) {
+	glanceImages, err := imageClient.ListImages(listOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(glanceImages) == 1 {
+		return &glanceImages[0], nil
+	}
+
+	// No image found
+	if len(glanceImages) == 0 {
+		return nil, nil
+	}
+
+	// Multiple images found
+	return nil, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, fmt.Sprintf("Expected to find exactly one image to import. Found %d", len(glanceImages)))
 }
 
 // glancePropertiesFromStruct populates a properties struct using field values and glance tags defined on the given struct

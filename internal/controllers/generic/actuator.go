@@ -18,194 +18,263 @@ package generic
 
 import (
 	"context"
-	"iter"
+	"fmt"
+	"time"
+
+	"github.com/go-logr/logr"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
 )
 
-// ResourceHelperFactory is an interface defining constructors for objects
-// required by the generic controller.
-type ResourceHelperFactory[
-	orcObjectPT interface {
-		*orcObjectT
-		client.Object
-		orcv1alpha1.ObjectWithConditions
-	}, orcObjectT any,
-	resourceSpecT any, filterT any,
-	osResourceT any,
-] interface {
-	// NewAPIObjectAdapter returns an APIObjectAdapter wrapping orcObject
-	NewAPIObjectAdapter(orcObject orcObjectPT) APIObjectAdapter[orcObjectPT, resourceSpecT, filterT]
+const (
+	// The time to wait between checking if a delete was successful
+	deletePollingPeriod = 1 * time.Second
 
-	// NewCreateActuator returns a CreateResourceActuator for the given
-	// orcObject. If it is not able to return an actuator, it MUST return either
-	// one or more ProgressStatuses, or an error. If returning ProgressStatuses,
-	// these MUST ensure that the object will be reconciled again at an
-	// appropriate time.
-	NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller ResourceController) ([]ProgressStatus, CreateResourceActuator[orcObjectPT, orcObjectT, filterT, osResourceT], error)
+	// The time to wait before reconciling again when we are waiting for some change in OpenStack
+	externalUpdatePollingPeriod = 15 * time.Second
+)
 
-	// NewDeleteActuator returns a DeleteResourceActuator for the given
-	// orcObject. If it is not able to return an actuator, it MUST return either
-	// one or more ProgressStatuses, or an error. If returning ProgressStatuses,
-	// these MUST ensure that the object will be reconciled again at an
-	// appropriate time.
-	//
-	// Consider carefully whether a DeleteResourceActuator needs all the same
-	// initialisation dependencies as a CreateResourceActuator. Consider that we
-	// may want to delete a resource that is partially or not initialised, or
-	// whose creation dependencies may no longer be in a healthy state.
-	NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller ResourceController) ([]ProgressStatus, DeleteResourceActuator[orcObjectPT, orcObjectT, osResourceT], error)
+type BaseResourceActuator[osResourcePT any] interface {
+	client.Object
+
+	GetManagementPolicy() orcv1alpha1.ManagementPolicy
+	GetManagedOptions() *orcv1alpha1.ManagedOptions
+
+	GetResourceID(osResource osResourcePT) string
+
+	GetOSResourceByStatusID(ctx context.Context) (bool, osResourcePT, error)
+	GetOSResourceBySpec(ctx context.Context) (osResourcePT, error)
 }
 
-type baseResourceActuator[
-	orcObjectPT interface {
-		*orcObjectT
-		client.Object
-		orcv1alpha1.ObjectWithConditions
-	}, orcObjectT any,
-	osResourceT any,
-] interface {
-	// GetResourceID returns a string identifier for the OpenStack resource
-	// managed by this actuator, typically the object's uuid. This is the value
-	// stored in status.id.
-	GetResourceID(osResource *osResourceT) string
+type CreateResourceActuator[osResourcePT any] interface {
+	BaseResourceActuator[osResourcePT]
 
-	// GetOSResourceByID fetches this actuator's OpenStack resource by id.
-	GetOSResourceByID(ctx context.Context, id string) (*osResourceT, error)
-
-	// ListOSResourcesForAdoption is used to prevent resource leaks in the event
-	// that we create an OpenStack resource, but fail to write its ID to the
-	// object's status. It returns a set of resources which match what the
-	// actuator would have created for this object. Ideally it should attempt to
-	// do this match as accurately as possible, remembering that OpenStack does
-	// not prevent the creation of objects with duplicate names.
-	//
-	// It is called in the creation flow immediately before creating a resource,
-	// and in the deletion flow when deleting an object which has a finalizer
-	// but no status.id.
-	//
-	// It returns 2 values:
-	// - an iterator over the matching OpenStack resources
-	// - a boolean indicating whether adoption should be considered for this object
-	//
-	// For example, we must return false for an object with no resource spec.
-	ListOSResourcesForAdoption(ctx context.Context, orcObject orcObjectPT) (iter.Seq2[*osResourceT, error], bool)
+	GetOSResourceByImportID(ctx context.Context) (bool, osResourcePT, error)
+	GetOSResourceByImportFilter(ctx context.Context) (bool, osResourcePT, error)
+	CreateResource(ctx context.Context) ([]WaitingOnEvent, osResourcePT, error)
 }
 
-// CreateResourceActuator provides methods required by the generic controller
-// during the create and update flows.
-type CreateResourceActuator[
-	orcObjectPT interface {
-		*orcObjectT
-		client.Object
-		orcv1alpha1.ObjectWithConditions
-	}, orcObjectT any,
-	filterT any,
-	osResourceT any,
-] interface {
-	baseResourceActuator[orcObjectPT, orcObjectT, osResourceT]
+type DeleteResourceActuator[osResourcePT any] interface {
+	BaseResourceActuator[osResourcePT]
 
-	// ListOSResourcesForImport returns all OpenStack resources matching the
-	// given resource import filter.
-	ListOSResourcesForImport(ctx context.Context, filter filterT) iter.Seq2[*osResourceT, error]
-
-	// CreateResource creates an OpenStack resource for the current object. It
-	// will return successfully at most once for a managed object, at the time
-	// it is created. See `ResourceReconciler` for how to modify an existing
-	// object.
-	//
-	// CreateResource MUST NOT perform any action which can fail after creating
-	// the primary OpenStack resource. Once the OpenStack resource exists this
-	// method will not be called again, so any failure after creation of the
-	// OpenStack resource is not safe.
-	//
-	// If further initialisation of a resource is required after creation, for
-	// example a Neutron object whose tags cannot be set during creation, this
-	// must be done by a reconciler instead.
-	//
-	// CreateResource MAY also perform other actions prior to creating the
-	// primary OpenStack resource, e.g. creating dependent ORC objects. These
-	// must be created idempotently, and must be created BEFORE creating the
-	// OpenStack resource.
-	//
-	// CreateResource does not need to check if the resource already exists, as
-	// that is done before it is called.
-	//
-	// If CreateResource cannot create the resource it MUST return either one or
-	// more ProgressStatuses, or an error. If returning ProgressStatuses, these
-	// MUST be sufficient to ensure that the object will be reconciled again at
-	// an appropriate time.
-	CreateResource(ctx context.Context, orcObject orcObjectPT) ([]ProgressStatus, *osResourceT, error)
+	DeleteResource(ctx context.Context, osResource osResourcePT) ([]WaitingOnEvent, error)
 }
 
-// DeleteResourceActuator provides methods required by the generic controller
-// during the delete flow.
-type DeleteResourceActuator[
-	orcObjectPT interface {
-		*orcObjectT
-		client.Object
-		orcv1alpha1.ObjectWithConditions
-	}, orcObjectT any,
-	osResourceT any,
-] interface {
-	baseResourceActuator[orcObjectPT, orcObjectT, osResourceT]
+func GetOrCreateOSResource[osResourcePT *osResourceT, osResourceT any](ctx context.Context, log logr.Logger, k8sClient client.Client, actuator CreateResourceActuator[osResourcePT]) ([]WaitingOnEvent, osResourcePT, error) {
+	// Get by status ID
+	if hasStatusID, osResource, err := actuator.GetOSResourceByStatusID(ctx); hasStatusID {
+		if orcerrors.IsNotFound(err) {
+			// An OpenStack resource we previously referenced has been deleted unexpectedly. We can't recover from this.
+			err = orcerrors.Terminal(orcv1alpha1.ConditionReasonUnrecoverableError, "resource has been deleted from OpenStack")
+		}
+		if osResource != nil {
+			log.V(4).Info("Got existing OpenStack resource", "ID", actuator.GetResourceID(osResource))
+		}
+		return nil, osResource, err
+	}
 
-	// DeleteResource deletes the OpenStack resource owned by the current
-	// object.
-	//
-	// The delete flow does not succeed until an attempt to get the resource
-	// returns no results, so DeleteResource does not need to verify that
-	// deletion has completed.
-	//
-	// DeleteResource SHOULD NOT return an error if the resource no longer exists.
-	//
-	// DeleteResource MAY also perform other actions prior to deleting the
-	// OpenStack resource, e.g. deleting dependent ORC objects. These actions
-	// must be performed idempotently, and must be performed BEFORE deleting the
-	// OpenStack resource.
-	//
-	// If DeleteResource cannot delete the resource it MUST return either one or
-	// more ProgressStatuses, or an error. If returning ProgressStatuses, these
-	// MUST be sufficient to ensure that the objet will be reconciled again at
-	// an appropriate time.
-	DeleteResource(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) ([]ProgressStatus, error)
+	// Import by ID
+	if hasImportID, osResource, err := actuator.GetOSResourceByImportID(ctx); hasImportID {
+		if orcerrors.IsNotFound(err) {
+			// We assume that a resource imported by ID must already exist. It's a terminal error if it doesn't.
+			err = orcerrors.Terminal(orcv1alpha1.ConditionReasonUnrecoverableError, "referenced resource does not exist in OpenStack")
+		}
+		if osResource != nil {
+			log.V(4).Info("Imported existing OpenStack resource by ID", "ID", actuator.GetResourceID(osResource))
+		}
+		return nil, osResource, err
+	}
+
+	// Import by filter
+	if hasImportFilter, osResource, err := actuator.GetOSResourceByImportFilter(ctx); hasImportFilter {
+		var waitEvents []WaitingOnEvent
+		if osResource == nil {
+			waitEvents = []WaitingOnEvent{WaitingOnOpenStackExternal(externalUpdatePollingPeriod)}
+		}
+		return waitEvents, osResource, err
+	}
+
+	// Create
+	if actuator.GetManagementPolicy() == orcv1alpha1.ManagementPolicyUnmanaged {
+		// We never create an unmanaged resource
+		// API validation should have ensured that one of the above functions returned
+		return nil, nil, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "Not creating unmanaged resource")
+	}
+
+	osResource, err := actuator.GetOSResourceBySpec(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if osResource != nil {
+		log.V(4).Info("Adopted previously created resource")
+		return nil, osResource, nil
+	}
+
+	log.V(3).Info("Creating resource")
+	return actuator.CreateResource(ctx)
 }
 
-// ResourceReconciler is a function which reconciles an object after creation.
-//
-// ResourceReconcilers are called on every non-delete reconciliation when the
-// resource exists, including the reconciliation which created the resource.
-//
-// A ResourceReconciler may return one or more ProgressStatuses, and/or an
-// error. Both errors and ProgressStatuses returned by ResourceReconcilers are
-// aggregated before being passed to the ResourceStatusWriter.
-//
-// In addition to informing the Progressing condition in the object's status, a
-// ProgressStatus returned by a ResourceReconciler may be used to cause the
-// controller to poll, for example because the resource has not yet reached an
-// ACTIVE status.
-type ResourceReconciler[orcObjectPT, osResourceT any] func(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) ([]ProgressStatus, error)
+func DeleteResource[osResourcePT *osResourceT, osResourceT any](ctx context.Context, log logr.Logger, obj DeleteResourceActuator[osResourcePT], onComplete func() error) (osResourcePT, ctrl.Result, error) {
+	// We always fetch the resource by ID so we can continue to report status even when waiting for a finalizer
+	hasStatusID, osResource, err := obj.GetOSResourceByStatusID(ctx)
+	if err != nil {
+		if !orcerrors.IsNotFound(err) {
+			return osResource, ctrl.Result{}, err
+		}
+		// Gophercloud can return an empty non-nil object when returning errors,
+		// which will confuse us below.
+		osResource = nil
+	}
 
-type ReconcileResourceActuator[orcObjectPT, osResourceT any] interface {
-	// GetResourceReconcilers returns zero or more ResourceReconcilers to be executed during the current reconcile.
-	//
-	// All ResourceReconcilers returned will be executed in the order returned.
-	// They will all be passed the orcObject and osResource passed to
-	// GetResourceReconcilers. Note therefore that any state changes performed
-	// by earlier ResourceReconcilers may not be reflected in the objects passed
-	// to later ones.
-	//
-	// Failure of a ResourceReconciler does not prevent execution of later
-	// ResourceReconcilers. All ResourceReconcilers will be executed, and their
-	// ProgressStatuses and errors aggregated.
-	//
-	// NOTE: Contrary to the typical Go idiom, GetResourceReconcilers may return
-	// both valid results, and an error. In this case, all returned
-	// ResourceReconcilers will still be executed. The error returned by
-	// GetResourceReconcilers itself will be aggregated with those returned by
-	// the ResourceReconcilers. An example situation in which
-	// GetResourceReconcilers itself might fail is if it fetched a list of
-	// objects and returned a separate ResourceReconciler for each of them.
-	GetResourceReconcilers(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT, controller ResourceController) ([]ResourceReconciler[orcObjectPT, osResourceT], error)
+	if len(obj.GetFinalizers()) > 1 {
+		log.V(4).Info("Deferring resource cleanup due to remaining external finalizers")
+		return osResource, ctrl.Result{}, nil
+	}
+
+	// We won't delete the resource for an unmanaged object, or if onDelete is detach
+	managementPolicy := obj.GetManagementPolicy()
+	managedOptions := obj.GetManagedOptions()
+	if managementPolicy == orcv1alpha1.ManagementPolicyUnmanaged || managedOptions.GetOnDelete() == orcv1alpha1.OnDeleteDetach {
+		logPolicy := []any{"managementPolicy", managementPolicy}
+		if managementPolicy == orcv1alpha1.ManagementPolicyManaged {
+			logPolicy = append(logPolicy, "onDelete", managedOptions.GetOnDelete())
+		}
+		log.V(4).Info("Not deleting OpenStack resource due to policy", logPolicy...)
+		return osResource, ctrl.Result{}, onComplete()
+	}
+
+	// If status.ID was not set, we still need to check if there's an orphaned object.
+	if osResource == nil && !hasStatusID {
+		osResource, err = obj.GetOSResourceBySpec(ctx)
+		if err != nil {
+			return osResource, ctrl.Result{}, err
+		}
+	}
+
+	if osResource == nil {
+		log.V(4).Info("Resource is no longer observed")
+		return osResource, ctrl.Result{}, onComplete()
+	}
+
+	log.V(4).Info("Deleting OpenStack resource")
+	waitEvents, err := obj.DeleteResource(ctx, osResource)
+	if err != nil {
+		return osResource, ctrl.Result{}, err
+	}
+
+	var requeue time.Duration
+	if len(waitEvents) > 0 {
+		requeue = MaxRequeue(waitEvents)
+	} else {
+		requeue = deletePollingPeriod
+	}
+	return osResource, ctrl.Result{RequeueAfter: requeue}, nil
+}
+
+type WaitingOnEvent interface {
+	Message() string
+	Requeue() time.Duration
+}
+
+type waitingOnType int
+
+const (
+	WaitingOnCreation waitingOnType = iota
+	WaitingOnReady
+	WaitingOnDeletion
+)
+
+type waitingOnORC struct {
+	kind      string
+	name      string
+	waitingOn waitingOnType
+}
+
+var _ WaitingOnEvent = waitingOnORC{}
+
+func (e waitingOnORC) Message() string {
+	var outcome string
+	switch e.waitingOn {
+	case WaitingOnCreation:
+		outcome = "created"
+	case WaitingOnReady:
+		outcome = "ready"
+	case WaitingOnDeletion:
+		outcome = "deleted"
+	}
+	return fmt.Sprintf("Waiting for %s/%s to be %s", e.kind, e.name, outcome)
+}
+
+func newWaitingOnORC(kind, name string, event waitingOnType) WaitingOnEvent {
+	return waitingOnORC{
+		kind:      kind,
+		name:      name,
+		waitingOn: event,
+	}
+}
+
+func WaitingOnORCExist(kind, name string) WaitingOnEvent {
+	return newWaitingOnORC(kind, name, WaitingOnCreation)
+}
+
+func WaitingOnORCReady(kind, name string) WaitingOnEvent {
+	return newWaitingOnORC(kind, name, WaitingOnReady)
+}
+
+func WaitingOnORCDeleted(kind, name string) WaitingOnEvent {
+	return newWaitingOnORC(kind, name, WaitingOnDeletion)
+}
+
+func (e waitingOnORC) Requeue() time.Duration {
+	return 0
+}
+
+type waitingOnOpenStack struct {
+	waitingOn     waitingOnType
+	pollingPeriod time.Duration
+}
+
+var _ WaitingOnEvent = waitingOnOpenStack{}
+
+func newWaitingOnOpenStack(event waitingOnType, pollingPeriod time.Duration) WaitingOnEvent {
+	return waitingOnOpenStack{
+		waitingOn:     event,
+		pollingPeriod: pollingPeriod,
+	}
+}
+
+func WaitingOnOpenStackExternal(pollingPeriod time.Duration) WaitingOnEvent {
+	return newWaitingOnOpenStack(WaitingOnCreation, pollingPeriod)
+}
+
+func WaitingOnOpenStackReady(kind, name string, pollingPeriod time.Duration) WaitingOnEvent {
+	return newWaitingOnOpenStack(WaitingOnReady, pollingPeriod)
+}
+
+func (e waitingOnOpenStack) Message() string {
+	var outcome string
+	switch e.waitingOn {
+	case WaitingOnCreation:
+		outcome = "be created externally"
+	case WaitingOnReady:
+		outcome = "be ready"
+	}
+	return fmt.Sprintf("Waiting for OpenStack resource to %s", outcome)
+}
+
+func (e waitingOnOpenStack) Requeue() time.Duration {
+	return e.pollingPeriod
+}
+
+func MaxRequeue(evts []WaitingOnEvent) time.Duration {
+	var ret time.Duration
+	for _, evt := range evts {
+		if evt.Requeue() > ret {
+			ret = evt.Requeue()
+		}
+	}
+	return ret
 }

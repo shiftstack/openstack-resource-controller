@@ -3,13 +3,11 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.0
+    controller-gen.kubebuilder.io/version: v0.16.4
   name: images.openstack.k-orc.cloud
 spec:
   group: openstack.k-orc.cloud
   names:
-    categories:
-    - openstack
     kind: Image
     listKind: ImageList
     plural: images
@@ -56,21 +54,21 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec specifies the desired state of the resource.
+            description: ImageSpec defines the desired state of an ORC object.
             properties:
               cloudCredentialsRef:
-                description: cloudCredentialsRef points to a secret containing OpenStack
+                description: CloudCredentialsRef points to a secret containing OpenStack
                   credentials
                 properties:
                   cloudName:
-                    description: cloudName specifies the name of the entry in the
+                    description: CloudName specifies the name of the entry in the
                       clouds.yaml file to use.
                     maxLength: 256
                     minLength: 1
                     type: string
                   secretName:
                     description: |-
-                      secretName is the name of a secret in the same namespace as the resource being provisioned.
+                      SecretName is the name of a secret in the same namespace as the resource being provisioned.
                       The secret must contain a key named `clouds.yaml` which contains an OpenStack clouds.yaml file.
                       The secret may optionally contain a key named `cacert` containing a PEM-encoded CA certificate.
                     maxLength: 253
@@ -82,41 +80,41 @@ spec:
                 type: object
               import:
                 description: |-
-                  import refers to an existing OpenStack resource which will be imported instead of
+                  Import refers to an existing OpenStack resource which will be imported instead of
                   creating a new one.
                 maxProperties: 1
                 minProperties: 1
                 properties:
                   filter:
                     description: |-
-                      filter contains a resource query which is expected to return a single
+                      Filter contains a resource query which is expected to return a single
                       result. The controller will continue to retry if filter returns no
                       results. If filter returns multiple results the controller will set an
                       error state and will not continue to retry.
                     minProperties: 1
                     properties:
                       name:
-                        description: name specifies the name of a Glance image
-                        maxLength: 255
+                        description: Name specifies the name of a Glance image
+                        maxLength: 1000
                         minLength: 1
                         type: string
                     type: object
                   id:
                     description: |-
-                      id contains the unique identifier of an existing OpenStack resource. Note
+                      ID contains the unique identifier of an existing OpenStack resource. Note
                       that when specifying an import by ID, the resource MUST already exist.
                       The ORC object will enter an error state if the resource does not exist.
                     format: uuid
                     type: string
                 type: object
               managedOptions:
-                description: managedOptions specifies options which may be applied
+                description: ManagedOptions specifies options which may be applied
                   to managed objects.
                 properties:
                   onDelete:
                     default: delete
                     description: |-
-                      onDelete specifies the behaviour of the controller when the ORC
+                      OnDelete specifies the behaviour of the controller when the ORC
                       object is deleted. Options are `delete` - delete the OpenStack resource;
                       `detach` - do not delete the OpenStack resource. If not specified, the
                       default is `delete`.
@@ -128,7 +126,7 @@ spec:
               managementPolicy:
                 default: managed
                 description: |-
-                  managementPolicy defines how ORC will treat the object. Valid values are
+                  ManagementPolicy defines how ORC will treat the object. Valid values are
                   `managed`: ORC will create, update, and delete the resource; `unmanaged`:
                   ORC will import an existing resource, and will not apply updates to it or
                   delete it.
@@ -141,19 +139,19 @@ spec:
                   rule: self == oldSelf
               resource:
                 description: |-
-                  resource specifies the desired state of the resource.
+                  Resource specifies the desired state of the resource.
 
-                  resource may not be specified if the management policy is `unmanaged`.
+                  Resource may not be specified if the management policy is `unmanaged`.
 
-                  resource must be specified if the management policy is `managed`.
+                  Resource must be specified if the management policy is `managed`.
                 properties:
                   content:
-                    description: content specifies how to obtain the image content.
+                    description: Content specifies how to obtain the image content.
                     properties:
                       containerFormat:
                         default: bare
                         description: |-
-                          containerFormat is the format of the image container.
+                          ContainerFormat is the format of the image container.
                           qcow2 and raw images do not usually have a container. This is specified as "bare", which is also the default.
                           Permitted values are ami, ari, aki, bare, ovf, ova, and docker.
                         enum:
@@ -164,11 +162,10 @@ spec:
                         - ovf
                         - ova
                         - docker
-                        - compressed
                         type: string
                       diskFormat:
                         description: |-
-                          diskFormat is the format of the disk image.
+                          DiskFormat is the format of the disk image.
                           Normal values are "qcow2", or "raw". Glance may be configured to support others.
                         enum:
                         - ami
@@ -185,12 +182,12 @@ spec:
                         type: string
                       download:
                         description: |-
-                          download describes how to obtain image data by downloading it from a URL.
+                          Download describes how to obtain image data by downloading it from a URL.
                           Must be set when creating a managed image.
                         properties:
                           decompress:
                             description: |-
-                              decompress specifies that the source data must be decompressed with the
+                              Decompress specifies that the source data must be decompressed with the
                               given compression algorithm before being stored. Specifying Decompress
                               will disable the use of Glance's web-download, as web-download cannot
                               currently deterministically decompress downloaded content.
@@ -201,14 +198,14 @@ spec:
                             type: string
                           hash:
                             description: |-
-                              hash is a hash which will be used to verify downloaded data, i.e.
+                              Hash is a hash which will be used to verify downloaded data, i.e.
                               before any decompression. If not specified, no hash verification will be
                               performed. Specifying a Hash will disable the use of Glance's
                               web-download, as web-download cannot currently deterministically verify
                               the hash of downloaded content.
                             properties:
                               algorithm:
-                                description: algorithm is the hash algorithm used
+                                description: Algorithm is the hash algorithm used
                                   to generate value.
                                 enum:
                                 - md5
@@ -217,7 +214,7 @@ spec:
                                 - sha512
                                 type: string
                               value:
-                                description: value is the hash of the image data using
+                                description: Value is the hash of the image data using
                                   Algorithm. It must be hex encoded using lowercase
                                   letters.
                                 maxLength: 1024
@@ -232,37 +229,37 @@ spec:
                             - message: hash is immutable
                               rule: self == oldSelf
                           url:
-                            description: url containing image data
+                            description: URL containing image data
                             format: uri
-                            maxLength: 2048
                             type: string
                         required:
                         - url
                         type: object
                     required:
                     - diskFormat
+                    - download
                     type: object
                     x-kubernetes-validations:
                     - message: content is immutable
                       rule: self == oldSelf
                   name:
                     description: |-
-                      name will be the name of the created Glance image. If not specified, the
+                      Name will be the name of the created Glance image. If not specified, the
                       name of the Image object will be used.
-                    maxLength: 255
+                    maxLength: 1024
                     minLength: 1
                     type: string
                   properties:
-                    description: properties is metadata available to consumers of
+                    description: Properties is metadata available to consumers of
                       the image
                     properties:
                       hardware:
                         description: |-
-                          hardware is a set of properties which control the virtual hardware
+                          Hardware is a set of properties which control the virtual hardware
                           created by Nova.
                         properties:
                           cdromBus:
-                            description: cdromBus specifies the type of disk controller
+                            description: CDROMBus specifies the type of disk controller
                               to attach CD-ROM devices to.
                             enum:
                             - scsi
@@ -274,14 +271,12 @@ spec:
                             - lxc
                             type: string
                           cpuCores:
-                            description: cpuCores is the preferred number of cores
+                            description: CPUCores is the preferred number of cores
                               to expose to the guest
-                            format: int32
-                            minimum: 1
                             type: integer
                           cpuPolicy:
                             description: |-
-                              cpuPolicy is used to pin the virtual CPUs (vCPUs) of instances to the
+                              CPUPolicy is used to pin the virtual CPUs (vCPUs) of instances to the
                               host's physical CPU cores (pCPUs). Host aggregates should be used to
                               separate these pinned instances from unpinned instances as the latter
                               will not respect the resourcing requirements of the former.
@@ -305,14 +300,12 @@ spec:
                             - dedicated
                             type: string
                           cpuSockets:
-                            description: cpuSockets is the preferred number of sockets
+                            description: CPUSockets is the preferred number of sockets
                               to expose to the guest
-                            format: int32
-                            minimum: 1
                             type: integer
                           cpuThreadPolicy:
                             description: |-
-                              cpuThreadPolicy further refines a CPUPolicy of 'dedicated' by stating
+                              CPUThreadPolicy further refines a CPUPolicy of 'dedicated' by stating
                               how hardware CPU threads in a simultaneous multithreading-based (SMT)
                               architecture be used. SMT-based architectures include Intel
                               processors with Hyper-Threading technology. In these architectures,
@@ -346,13 +339,11 @@ spec:
                             - require
                             type: string
                           cpuThreads:
-                            description: cpuThreads is the preferred number of threads
+                            description: CPUThreads is the preferred number of threads
                               to expose to the guest
-                            format: int32
-                            minimum: 1
                             type: integer
                           diskBus:
-                            description: diskBus specifies the type of disk controller
+                            description: DiskBus specifies the type of disk controller
                               to attach disk devices to.
                             enum:
                             - scsi
@@ -365,7 +356,7 @@ spec:
                             type: string
                           scsiModel:
                             description: |-
-                              scsiModel enables the use of VirtIO SCSI (virtio-scsi) to provide
+                              SCSIModel enables the use of VirtIO SCSI (virtio-scsi) to provide
                               block device access for compute instances; by default, instances use
                               VirtIO Block (virtio-blk). VirtIO SCSI is a para-virtualized SCSI
                               controller device that provides improved scalability and performance,
@@ -377,7 +368,7 @@ spec:
                             type: string
                           vifModel:
                             description: |-
-                              vifModel specifies the model of virtual network interface device to use.
+                              VIFModel specifies the model of virtual network interface device to use.
 
                               Permitted values are e1000, e1000e, ne2k_pci, pcnet, rtl8139, virtio,
                               and vmxnet3.
@@ -392,35 +383,32 @@ spec:
                             type: string
                         type: object
                       minDiskGB:
-                        description: minDiskGB is the minimum amount of disk space
-                          in GB that is required to boot the image
-                        format: int32
+                        description: MinDisk is the minimum amount of disk space in
+                          GB that is required to boot the image
                         minimum: 1
                         type: integer
                       minMemoryMB:
-                        description: minMemoryMB is the minimum amount of RAM in MB
+                        description: MinMemoryMB is the minimum amount of RAM in MB
                           that is required to boot the image.
-                        format: int32
                         minimum: 1
                         type: integer
                     type: object
                   protected:
                     description: |-
-                      protected specifies that the image is protected from deletion.
+                      Protected specifies that the image is protected from deletion.
                       If not specified, the default is false.
                     type: boolean
                   tags:
-                    description: tags is a list of tags which will be applied to the
+                    description: Tags is a list of tags which will be applied to the
                       image. A tag has a maximum length of 255 characters.
                     items:
                       maxLength: 255
                       minLength: 1
                       type: string
-                    maxItems: 32
                     type: array
                     x-kubernetes-list-type: set
                   visibility:
-                    description: visibility of the image
+                    description: Visibility of the image
                     enum:
                     - public
                     - private
@@ -466,11 +454,11 @@ spec:
             - message: resource content must be specified when not importing
               rule: '!has(self.__import__) ? has(self.resource.content) : true'
           status:
-            description: status defines the observed state of the resource.
+            description: ImageStatus defines the observed state of an ORC resource.
             properties:
               conditions:
                 description: |-
-                  conditions represents the observed status of the object.
+                  Conditions represents the observed status of the object.
                   Known .status.conditions.type are: "Available", "Progressing"
 
                   Available represents the availability of the OpenStack resource. If it is
@@ -542,27 +530,26 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               downloadAttempts:
-                description: downloadAttempts is the number of times the controller
+                description: DownloadAttempts is the number of times the controller
                   has attempted to download the image contents
-                format: int32
                 type: integer
               id:
-                description: id is the unique identifier of the OpenStack resource.
+                description: ID is the unique identifier of the OpenStack resource.
                 type: string
               resource:
-                description: resource contains the observed state of the OpenStack
+                description: Resource contains the observed state of the OpenStack
                   resource.
                 properties:
                   hash:
                     description: |-
-                      hash is the hash of the image data published by Glance. Note that this is
+                      Hash is the hash of the image data published by Glance. Note that this is
                       a hash of the data stored internally by Glance, which will have been
                       decompressed and potentially format converted depending on server-side
                       configuration which is not visible to clients. It is expected that this
                       hash will usually differ from the download hash.
                     properties:
                       algorithm:
-                        description: algorithm is the hash algorithm used to generate
+                        description: Algorithm is the hash algorithm used to generate
                           value.
                         enum:
                         - md5
@@ -571,7 +558,7 @@ spec:
                         - sha512
                         type: string
                       value:
-                        description: value is the hash of the image data using Algorithm.
+                        description: Value is the hash of the image data using Algorithm.
                           It must be hex encoded using lowercase letters.
                         maxLength: 1024
                         minLength: 1
@@ -582,15 +569,14 @@ spec:
                     - value
                     type: object
                   sizeB:
-                    description: sizeB is the size of the image data, in bytes
+                    description: SizeB is the size of the image data, in bytes
                     format: int64
                     type: integer
                   status:
-                    description: status is the image status as reported by Glance
-                    maxLength: 1024
+                    description: Status is the image status as reported by Glance
                     type: string
                   virtualSizeB:
-                    description: virtualSizeB is the size of the disk the image data
+                    description: VirtualSizeB is the size of the disk the image data
                       represents, in bytes
                     format: int64
                     type: integer

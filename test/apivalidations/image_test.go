@@ -41,7 +41,7 @@ func imageStub(name string, namespace *corev1.Namespace) *orcv1alpha1.Image {
 	return obj
 }
 
-func testImageResource() *applyconfigv1alpha1.ImageResourceSpecApplyConfiguration {
+func testResource() *applyconfigv1alpha1.ImageResourceSpecApplyConfiguration {
 	return applyconfigv1alpha1.ImageResourceSpec().
 		WithContent(applyconfigv1alpha1.ImageContent().
 			WithContainerFormat(orcv1alpha1.ImageContainerFormatBare).
@@ -59,11 +59,11 @@ func basePatch(image client.Object) *applyconfigv1alpha1.ImageApplyConfiguration
 
 func minimalManagedPatch(orcImage client.Object) *applyconfigv1alpha1.ImageApplyConfiguration {
 	patch := basePatch(orcImage)
-	patch.Spec.WithResource(testImageResource())
+	patch.Spec.WithResource(testResource())
 	return patch
 }
 
-func testImageImport() *applyconfigv1alpha1.ImageImportApplyConfiguration {
+func testImport() *applyconfigv1alpha1.ImageImportApplyConfiguration {
 	return applyconfigv1alpha1.ImageImport().WithID(imageID)
 }
 
@@ -138,7 +138,7 @@ var _ = Describe("ORC Image API validations", func() {
 		patch.Spec.WithManagementPolicy(orcv1alpha1.ManagementPolicyUnmanaged)
 		Expect(applyObj(ctx, image, patch)).NotTo(Succeed())
 
-		patch.Spec.WithImport(testImageImport())
+		patch.Spec.WithImport(testImport())
 		Expect(applyObj(ctx, image, patch)).To(Succeed())
 	})
 
@@ -147,8 +147,8 @@ var _ = Describe("ORC Image API validations", func() {
 		patch := basePatch(image)
 		patch.Spec.
 			WithManagementPolicy(orcv1alpha1.ManagementPolicyUnmanaged).
-			WithImport(testImageImport()).
-			WithResource(testImageResource())
+			WithImport(testImport()).
+			WithResource(testResource())
 	})
 
 	It("should not permit empty import", func(ctx context.Context) {
@@ -186,7 +186,7 @@ var _ = Describe("ORC Image API validations", func() {
 		patch.Spec.WithManagementPolicy(orcv1alpha1.ManagementPolicyManaged)
 		Expect(applyObj(ctx, image, patch)).NotTo(Succeed())
 
-		patch.Spec.WithResource(testImageResource())
+		patch.Spec.WithResource(testResource())
 		Expect(applyObj(ctx, image, patch)).To(Succeed())
 	})
 
@@ -194,9 +194,9 @@ var _ = Describe("ORC Image API validations", func() {
 		image := imageStub("image", namespace)
 		patch := basePatch(image)
 		patch.Spec.
-			WithImport(testImageImport()).
+			WithImport(testImport()).
 			WithManagementPolicy(orcv1alpha1.ManagementPolicyManaged).
-			WithResource(testImageResource())
+			WithResource(testResource())
 		Expect(applyObj(ctx, image, patch)).NotTo(Succeed())
 	})
 
@@ -211,7 +211,7 @@ var _ = Describe("ORC Image API validations", func() {
 		image := imageStub("image", namespace)
 		patch := basePatch(image)
 		patch.Spec.
-			WithImport(testImageImport()).
+			WithImport(testImport()).
 			WithManagementPolicy(orcv1alpha1.ManagementPolicyUnmanaged).
 			WithManagedOptions(applyconfigv1alpha1.ManagedOptions().
 				WithOnDelete(orcv1alpha1.OnDeleteDetach))
@@ -225,7 +225,6 @@ var _ = Describe("ORC Image API validations", func() {
 			WithManagedOptions(applyconfigv1alpha1.ManagedOptions().
 				WithOnDelete(orcv1alpha1.OnDeleteDetach))
 		Expect(applyObj(ctx, image, patch)).To(Succeed())
-		Expect(image.Spec.ManagedOptions.OnDelete).To(Equal(orcv1alpha1.OnDelete("detach")))
 	})
 
 	DescribeTable("should permit containerFormat",
@@ -239,7 +238,6 @@ var _ = Describe("ORC Image API validations", func() {
 		Entry(string(orcv1alpha1.ImageContainerFormatAMI), orcv1alpha1.ImageContainerFormatAMI),
 		Entry(string(orcv1alpha1.ImageContainerFormatARI), orcv1alpha1.ImageContainerFormatARI),
 		Entry(string(orcv1alpha1.ImageContainerFormatBare), orcv1alpha1.ImageContainerFormatBare),
-		Entry(string(orcv1alpha1.ImageContainerFormatCompressed), orcv1alpha1.ImageContainerFormatCompressed),
 		Entry(string(orcv1alpha1.ImageContainerFormatDocker), orcv1alpha1.ImageContainerFormatDocker),
 		Entry(string(orcv1alpha1.ImageContainerFormatOVA), orcv1alpha1.ImageContainerFormatOVA),
 		Entry(string(orcv1alpha1.ImageContainerFormatOVF), orcv1alpha1.ImageContainerFormatOVF),

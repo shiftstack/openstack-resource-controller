@@ -26,7 +26,6 @@ package mock
 
 import (
 	context "context"
-	iter "iter"
 	reflect "reflect"
 
 	attachinterfaces "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/attachinterfaces"
@@ -34,6 +33,7 @@ import (
 	flavors "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	servergroups "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	servers "github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	osclients "github.com/k-orc/openstack-resource-controller/internal/osclients"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -193,10 +193,10 @@ func (mr *MockComputeClientMockRecorder) ListAvailabilityZones() *gomock.Call {
 }
 
 // ListFlavors mocks base method.
-func (m *MockComputeClient) ListFlavors(ctx context.Context, listOpts flavors.ListOptsBuilder) iter.Seq2[*flavors.Flavor, error] {
+func (m *MockComputeClient) ListFlavors(ctx context.Context, listOpts flavors.ListOptsBuilder) <-chan osclients.Result[*flavors.Flavor] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListFlavors", ctx, listOpts)
-	ret0, _ := ret[0].(iter.Seq2[*flavors.Flavor, error])
+	ret0, _ := ret[0].(<-chan osclients.Result[*flavors.Flavor])
 	return ret0
 }
 
@@ -222,10 +222,10 @@ func (mr *MockComputeClientMockRecorder) ListServerGroups() *gomock.Call {
 }
 
 // ListServers mocks base method.
-func (m *MockComputeClient) ListServers(ctx context.Context, listOpts servers.ListOptsBuilder) iter.Seq2[*servers.Server, error] {
+func (m *MockComputeClient) ListServers(ctx context.Context, listOpts servers.ListOptsBuilder) <-chan osclients.Result[*servers.Server] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListServers", ctx, listOpts)
-	ret0, _ := ret[0].(iter.Seq2[*servers.Server, error])
+	ret0, _ := ret[0].(<-chan osclients.Result[*servers.Server])
 	return ret0
 }
 
