@@ -7,9 +7,6 @@ nav:
   - Getting started: getting-started.md
   - Reference: reference.md
   - Design decisions: design-decisions.md
-  - API contracts: api-contracts.md
-  - Local development: local-development.md
-  - Writing controllers: writing-controllers.md
 repo_url: https://github.com/k-orc/openstack-resource-controller
 extra:
   analytics:
@@ -37,8 +34,3 @@ plugins:
   - redirects:
       redirect_maps:
         'getting_started.md': 'getting-started.md'
-markdown_extensions:
-  - admonition
-  - pymdownx.details
-  - pymdownx.keys
-  - pymdownx.superfences

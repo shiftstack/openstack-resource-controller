@@ -1,7 +1,7 @@
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.31.0
+ENVTEST_K8S_VERSION = 1.30.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -91,27 +91,18 @@ test: envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list $(TEST_PATHS) | grep -v /e2e) -coverprofile cover.out
 
 # Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
-# The kuttl tests executed by test-e2e support the following environment
-# variables:
-# - E2E_OSCLOUDS: if set, the path to a clouds.yaml to use for the test run. If
-#   not set, defaults to /etc/openstack/clouds.yaml.
-# - E2E_KUTTL_DIR: if set, the path to a directory containing kuttl tests, e.g.
-#   ./internal/controllers/flavor/tests. Only tests from this directory will
-#   run. If not set, all discovered kuttl tests will run.
-# - E2E_KUTTL_TEST: if set, only run the specific named test, e.g.
-#   'create-full-v4'. If not set, all tests will run.
 .PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
-test-e2e: kuttl
+test-e2e:
 	# go test ./test/e2e/ -v -ginkgo.v
 	./hack/e2e.sh
 
 .PHONY: lint
-lint: golangci-kal ## Run golangci-kal linter
-	$(GOLANGCI_KAL) run
+lint: golangci-lint ## Run golangci-lint linter
+	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
-lint-fix: golangci-kal ## Run golangci-lint linter and perform fixes
-	$(GOLANGCI_KAL) run --fix
+lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
+	$(GOLANGCI_LINT) run --fix
 
 ##@ Build
 
@@ -223,18 +214,14 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-GOLANGCI_KAL = $(LOCALBIN)/golangci-kal
 MOCKGEN = $(LOCALBIN)/mockgen
-KUTTL = $(LOCALBIN)/kubectl-kuttl
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.2
-CONTROLLER_TOOLS_VERSION ?= v0.17.0
-ENVTEST_VERSION ?= release-0.19
-GOLANGCI_LINT_VERSION ?= v1.63.4
-KAL_VERSION ?= v0.0.0-20250120175744-495588b8c987
+CONTROLLER_TOOLS_VERSION ?= v0.16.4
+ENVTEST_VERSION ?= release-0.18
+GOLANGCI_LINT_VERSION ?= v1.61.0
 MOCKGEN_VERSION ?= v0.4.0
-KUTTL_VERSION ?= v0.20.0
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
@@ -256,33 +243,10 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
-define custom-gcl
-version:  $(GOLANGCI_LINT_VERSION)
-name: golangci-kal
-destination: $(LOCALBIN)
-plugins:
-- module: 'github.com/JoelSpeed/kal'
-  version: $(KAL_VERSION)
-endef
-export custom-gcl
-
-CUSTOM_GCL_FILE ?= $(shell pwd)/.custom-gcl.yml
-
-.PHONY: golangci-kal
-golangci-kal: $(GOLANGCI_KAL)
-$(GOLANGCI_KAL): $(LOCALBIN) $(GOLANGCI_LINT)
-	$(file >$(CUSTOM_GCL_FILE),$(custom-gcl))
-	$(GOLANGCI_LINT) custom
-
 .PHONY: mockgen
 mockgen: $(MOCKGEN) ## Download mockgen locally if necessary.
 $(MOCKGEN): $(LOCALBIN)
 	$(call go-install-tool,$(MOCKGEN),go.uber.org/mock/mockgen,$(MOCKGEN_VERSION))
-
-.PHONY: kuttl
-kuttl: $(KUTTL) ## Download kuttl locally if necessary.
-$(KUTTL): $(LOCALBIN)
-	$(call go-install-tool,$(KUTTL),github.com/kudobuilder/kuttl/cmd/kubectl-kuttl,$(KUTTL_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

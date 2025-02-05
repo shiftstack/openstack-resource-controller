@@ -23,13 +23,19 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
+	"github.com/k-orc/openstack-resource-controller/internal/controllers/common"
 	"github.com/k-orc/openstack-resource-controller/internal/controllers/generic"
 	osclients "github.com/k-orc/openstack-resource-controller/internal/osclients"
+	"github.com/k-orc/openstack-resource-controller/internal/util/applyconfigs"
 	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
+	orcapplyconfigv1alpha1 "github.com/k-orc/openstack-resource-controller/pkg/clients/applyconfiguration/api/v1alpha1"
 )
 
 // +kubebuilder:rbac:groups=openstack.k-orc.cloud,resources=images,verbs=get;list;watch;create;update;patch;delete
@@ -76,13 +82,17 @@ func (r *orcImageReconciler) reconcileNormal(ctx context.Context, orcObject *orc
 		}
 	}()
 
-	actuator, err := newActuator(ctx, r, orcObject)
+	if !controllerutil.ContainsFinalizer(orcObject, Finalizer) {
+		patch := common.SetFinalizerPatch(orcObject, Finalizer)
+		return ctrl.Result{}, r.client.Patch(ctx, orcObject, patch, client.ForceOwnership, ssaFieldOwner(SSAFinalizerTxn))
+	}
+
+	actuator, err := newActuator(ctx, r.client, r.scopeFactory, orcObject)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	adapter := imageAdapter{orcObject}
-	waitEvents, osResource, err := generic.GetOrCreateOSResource(ctx, log, r, adapter, actuator)
+	waitEvents, osResource, err := generic.GetOrCreateOSResource(ctx, log, r.client, actuator)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -197,15 +207,20 @@ func (r *orcImageReconciler) reconcileDelete(ctx context.Context, orcObject *orc
 		}
 	}()
 
-	actuator, err := newActuator(ctx, r, orcObject)
+	actuator, err := newActuator(ctx, r.client, r.scopeFactory, orcObject)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	adapter := imageAdapter{orcObject}
-	deleted, waitEvents, osResource, err := generic.DeleteResource(ctx, log, r, adapter, actuator)
+	osResource, result, err := generic.DeleteResource(ctx, log, actuator, func() error {
+		deleted = true
+
+		// Clear the finalizer
+		applyConfig := orcapplyconfigv1alpha1.Image(orcObject.Name, orcObject.Namespace).WithUID(orcObject.UID)
+		return r.client.Patch(ctx, orcObject, applyconfigs.Patch(types.ApplyPatchType, applyConfig), client.ForceOwnership, ssaFieldOwner(SSAFinalizerTxn))
+	})
 	addStatus(withResource(osResource))
-	return ctrl.Result{RequeueAfter: generic.MaxRequeue(waitEvents)}, err
+	return result, err
 }
 
 func downloadingMessage(msg string, orcImage *orcv1alpha1.Image) string {

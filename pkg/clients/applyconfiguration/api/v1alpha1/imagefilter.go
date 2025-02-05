@@ -18,14 +18,10 @@ limitations under the License.
 
 package v1alpha1
 
-import (
-	v1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
-)
-
 // ImageFilterApplyConfiguration represents a declarative configuration of the ImageFilter type for use
 // with apply.
 type ImageFilterApplyConfiguration struct {
-	Name *v1alpha1.OpenStackName `json:"name,omitempty"`
+	Name *string `json:"name,omitempty"`
 }
 
 // ImageFilterApplyConfiguration constructs a declarative configuration of the ImageFilter type for use with
@@ -37,7 +33,7 @@ func ImageFilter() *ImageFilterApplyConfiguration {
 // WithName sets the Name field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Name field is set to the value of the last call.
-func (b *ImageFilterApplyConfiguration) WithName(value v1alpha1.OpenStackName) *ImageFilterApplyConfiguration {
+func (b *ImageFilterApplyConfiguration) WithName(value string) *ImageFilterApplyConfiguration {
 	b.Name = &value
 	return b
 }
