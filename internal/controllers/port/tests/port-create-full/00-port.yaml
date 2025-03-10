@@ -1,0 +1,23 @@
+---
+apiVersion: openstack.k-orc.cloud/v1alpha1
+kind: Port
+metadata:
+  name: port-create-full
+spec:
+  cloudCredentialsRef:
+    cloudName: openstack-admin
+    secretName: openstack-clouds
+  managementPolicy: managed
+  networkRef: port-create-full
+  resource:
+    name: port-create-full-override
+    description: Port from "create full" test
+    allowedAddressPairs:
+      - ip: "192.168.122.14"
+        mac: "92:42:9c:13:98:82"
+    tags:
+    - tag1
+    securityGroupRefs:
+    - port-create-full
+    addresses:
+    - subnetRef: port-create-full

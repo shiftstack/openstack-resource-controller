@@ -1,18 +1,18 @@
 ---
 apiVersion: openstack.k-orc.cloud/v1alpha1
-kind: Router
+kind: Port
 metadata:
-  name: router-import
+  name: port-import
 spec:
   cloudCredentialsRef:
     cloudName: openstack
     secretName: openstack-clouds
   managementPolicy: unmanaged
-  # TODO: Do we need it? (From customer perspective we don't)
+  # TODO: Remove when https://github.com/k-orc/openstack-resource-controller/issues/298 is fixed
   networkRef: port-import
   import:
     filter:
-      name: router-import-external
-      description: Router from "router-import" test
+      name: port-import-external
+      description: Port from "port-import" test
       tags:
         - tag1
