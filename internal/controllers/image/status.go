@@ -59,7 +59,7 @@ type updateStatusOpts struct {
 	progressMessage           *string
 	err                       error
 	incrementDownloadAttempts bool
-	progressStatus            []progress.ProgressStatus
+	progressStatus            []progress.ReconcileStatus
 }
 
 type updateStatusOpt func(*updateStatusOpts)
@@ -76,7 +76,7 @@ func withError(err error) updateStatusOpt {
 	}
 }
 
-func withProgressStatus(progressStatus ...progress.ProgressStatus) updateStatusOpt {
+func withProgressStatus(progressStatus ...progress.ReconcileStatus) updateStatusOpt {
 	return func(opts *updateStatusOpts) {
 		opts.progressStatus = append(opts.progressStatus, progressStatus...)
 	}

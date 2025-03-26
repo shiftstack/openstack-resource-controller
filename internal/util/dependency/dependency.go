@@ -229,7 +229,7 @@ func (d *DeletionGuardDependency[objectTP, _, _, _, _, _]) addDeletionGuard(mgr 
 // - an error
 //
 // Dependencies are filtered by the readyFilter argument. Dependencies which are not ready will be in progressStatus but not in the returned object map.
-func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependencies(ctx context.Context, k8sClient client.Client, obj objectTP, readyFilter func(depTP) bool) (depsMap map[string]depTP, progressStatus []progress.ProgressStatus, err error) {
+func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependencies(ctx context.Context, k8sClient client.Client, obj objectTP, readyFilter func(depTP) bool) (depsMap map[string]depTP, progressStatus []progress.ReconcileStatus, err error) {
 	depKind, err := getObjectKind(depTP(new(depT)), k8sClient.Scheme())
 	if err != nil {
 		return nil, nil, err
@@ -268,7 +268,7 @@ func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependencie
 }
 
 // GetDependency is a convenience wrapper around GetDependencies when the caller only expects a single result.
-func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependency(ctx context.Context, k8sClient client.Client, obj objectTP, readyFilter func(depTP) bool) (depTP, []progress.ProgressStatus, error) {
+func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependency(ctx context.Context, k8sClient client.Client, obj objectTP, readyFilter func(depTP) bool) (depTP, []progress.ReconcileStatus, error) {
 	depsMap, progressStatus, err := d.GetDependencies(ctx, k8sClient, obj, readyFilter)
 	if len(progressStatus) > 0 || err != nil {
 		return nil, progressStatus, err

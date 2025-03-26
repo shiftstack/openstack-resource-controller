@@ -83,7 +83,7 @@ func (actuator serverActuator) ListOSResourcesForAdoption(ctx context.Context, o
 	return actuator.osClient.ListServers(ctx, listOpts), true
 }
 
-func (actuator serverActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ProgressStatus, iter.Seq2[*osResourceT, error], error) {
+func (actuator serverActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ReconcileStatus, iter.Seq2[*osResourceT, error], error) {
 	listOpts := servers.ListOpts{
 		Tags:       neutrontags.Join(filter.Tags),
 		TagsAny:    neutrontags.Join(filter.TagsAny),
@@ -98,14 +98,14 @@ func (actuator serverActuator) ListOSResourcesForImport(ctx context.Context, obj
 	return nil, actuator.osClient.ListServers(ctx, listOpts), nil
 }
 
-func (actuator serverActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Server) ([]progress.ProgressStatus, *servers.Server, error) {
+func (actuator serverActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Server) ([]progress.ReconcileStatus, *servers.Server, error) {
 	resource := obj.Spec.Resource
 	if resource == nil {
 		// Should have been caught by API validation
 		return nil, nil, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "Creation requested, but spec.resource is not set")
 	}
 
-	var progressStatus []progress.ProgressStatus
+	var progressStatus []progress.ReconcileStatus
 
 	image := &orcv1alpha1.Image{}
 	{
@@ -220,7 +220,7 @@ func (actuator serverActuator) CreateResource(ctx context.Context, obj *orcv1alp
 	return nil, osResource, err
 }
 
-func (actuator serverActuator) DeleteResource(ctx context.Context, _ orcObjectPT, osResource *servers.Server) ([]progress.ProgressStatus, error) {
+func (actuator serverActuator) DeleteResource(ctx context.Context, _ orcObjectPT, osResource *servers.Server) ([]progress.ReconcileStatus, error) {
 	return nil, actuator.osClient.DeleteServer(ctx, osResource.ID)
 }
 
@@ -232,10 +232,10 @@ func (actuator serverActuator) GetResourceReconcilers(ctx context.Context, orcOb
 	}, nil
 }
 
-func (serverActuator) checkStatus(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) ([]progress.ProgressStatus, error) {
+func (serverActuator) checkStatus(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) ([]progress.ReconcileStatus, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	var waitEvents []progress.ProgressStatus
+	var waitEvents []progress.ReconcileStatus
 	var err error
 
 	switch osResource.Status {
@@ -259,17 +259,17 @@ func (serverHelperFactory) NewAPIObjectAdapter(obj orcObjectPT) adapterI {
 	return serverAdapter{obj}
 }
 
-func (serverHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, createResourceActuator, error) {
+func (serverHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, createResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, controller, orcObject)
 	return progressStatus, actuator, err
 }
 
-func (serverHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, deleteResourceActuator, error) {
+func (serverHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, deleteResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, controller, orcObject)
 	return progressStatus, actuator, err
 }
 
-func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Server) (serverActuator, []progress.ProgressStatus, error) {
+func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Server) (serverActuator, []progress.ReconcileStatus, error) {
 	if orcObject == nil {
 		return serverActuator{}, nil, fmt.Errorf("orcObject may not be nil")
 	}

@@ -77,7 +77,7 @@ func (actuator subnetActuator) ListOSResourcesForAdoption(ctx context.Context, o
 	return actuator.osClient.ListSubnet(ctx, listOpts), true
 }
 
-func (actuator subnetActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ProgressStatus, iter.Seq2[*osResourceT, error], error) {
+func (actuator subnetActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ReconcileStatus, iter.Seq2[*osResourceT, error], error) {
 	var networkID string
 	var progressStatus []progress.ProgressStatus
 
@@ -123,7 +123,7 @@ func (actuator subnetActuator) ListOSResourcesForImport(ctx context.Context, obj
 	return nil, actuator.osClient.ListSubnet(ctx, listOpts), nil
 }
 
-func (actuator subnetActuator) CreateResource(ctx context.Context, obj orcObjectPT) ([]progress.ProgressStatus, *subnets.Subnet, error) {
+func (actuator subnetActuator) CreateResource(ctx context.Context, obj orcObjectPT) ([]progress.ReconcileStatus, *subnets.Subnet, error) {
 	resource := obj.Spec.Resource
 	if resource == nil {
 		// Should have been caught by API validation
@@ -201,7 +201,7 @@ func (actuator subnetActuator) CreateResource(ctx context.Context, obj orcObject
 	return nil, osResource, err
 }
 
-func (actuator subnetActuator) DeleteResource(ctx context.Context, obj orcObjectPT, osResource *subnets.Subnet) ([]progress.ProgressStatus, error) {
+func (actuator subnetActuator) DeleteResource(ctx context.Context, obj orcObjectPT, osResource *subnets.Subnet) ([]progress.ReconcileStatus, error) {
 	// Delete any RouterInterface first, as this would prevent deletion of the subnet
 	routerInterface, err := getRouterInterface(ctx, actuator.k8sClient, obj)
 	if err != nil {
@@ -215,7 +215,7 @@ func (actuator subnetActuator) DeleteResource(ctx context.Context, obj orcObject
 				return nil, err
 			}
 		}
-		return []progress.ProgressStatus{progress.WaitingOnORCDeleted("RouterInterface", routerInterface.GetName())}, nil
+		return []progress.ReconcileStatus{progress.WaitingOnORCDeleted("RouterInterface", routerInterface.GetName())}, nil
 	}
 
 	return nil, actuator.osClient.DeleteSubnet(ctx, osResource.ID)
@@ -230,8 +230,8 @@ func (actuator subnetActuator) GetResourceReconcilers(ctx context.Context, orcOb
 	}, nil
 }
 
-func (actuator subnetActuator) ensureRouterInterface(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) ([]progress.ProgressStatus, error) {
-	var waitEvents []progress.ProgressStatus
+func (actuator subnetActuator) ensureRouterInterface(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) ([]progress.ReconcileStatus, error) {
+	var waitEvents []progress.ReconcileStatus
 	var err error
 
 	routerInterface, err := getRouterInterface(ctx, actuator.k8sClient, orcObject)
@@ -332,17 +332,17 @@ func (subnetHelperFactory) NewAPIObjectAdapter(obj orcObjectPT) adapterI {
 	return subnetAdapter{obj}
 }
 
-func (subnetHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, createResourceActuator, error) {
+func (subnetHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, createResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, controller, orcObject)
 	return progressStatus, actuator, err
 }
 
-func (subnetHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, deleteResourceActuator, error) {
+func (subnetHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, deleteResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, controller, orcObject)
 	return progressStatus, actuator, err
 }
 
-func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Subnet) (subnetActuator, []progress.ProgressStatus, error) {
+func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Subnet) (subnetActuator, []progress.ReconcileStatus, error) {
 	if orcObject == nil {
 		return subnetActuator{}, nil, fmt.Errorf("orcObject may not be nil")
 	}

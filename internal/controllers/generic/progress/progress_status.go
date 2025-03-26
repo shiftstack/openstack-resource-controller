@@ -17,35 +17,202 @@ limitations under the License.
 package progress
 
 import (
+	"errors"
 	"fmt"
 	"time"
+
+	ctrl "sigs.k8s.io/controller-runtime"
+
+	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
 )
 
-type ProgressStatus interface {
-	Message() string
+type ReconcileStatus interface {
+	ProgressMessages() []string
+
+	EphemeralError() error
+	TerminalError() *orcerrors.TerminalError
+
 	Requeue() time.Duration
+	Return() (ctrl.Result, error)
+
+	IsSetNotAvailable() bool
+	NeedsReschedule() (bool, error)
+
+	WithProgressMessage(...string) ReconcileStatus
+	WithRequeue(time.Duration) ReconcileStatus
+	WithSetNotAvailable() ReconcileStatus
+	WithError(error) ReconcileStatus
+
+	WithReconcileStatus(ReconcileStatus) ReconcileStatus
 }
 
-type waitingOnType int
+type reconcileStatus struct {
+	messages        []string
+	requeue         time.Duration
+	setNotAvailable bool
+
+	ephemeralError error
+	terminalError  *orcerrors.TerminalError
+}
+
+var _ ReconcileStatus = &reconcileStatus{}
+
+func NewReconcileStatus() ReconcileStatus {
+	return (*reconcileStatus)(nil)
+}
+
+func NewReconcileError(err error) ReconcileStatus {
+	return NewReconcileStatus().WithError(err)
+}
+
+func (r *reconcileStatus) ProgressMessages() []string {
+	if r == nil {
+		return nil
+	}
+
+	return r.messages
+}
+
+func (r *reconcileStatus) EphemeralError() error {
+	if r == nil {
+		return nil
+	}
+
+	return r.ephemeralError
+}
+
+func (r *reconcileStatus) TerminalError() *orcerrors.TerminalError {
+	if r == nil {
+		return nil
+	}
+
+	return r.terminalError
+}
+
+func (r *reconcileStatus) Requeue() time.Duration {
+	if r == nil {
+		return 0
+	}
+
+	return r.requeue
+}
+
+func (r *reconcileStatus) IsSetNotAvailable() bool {
+	if r == nil {
+		return false
+	}
+
+	return r.setNotAvailable
+}
+
+func (r *reconcileStatus) NeedsReschedule() (bool, error) {
+	if r == nil {
+		return false, nil
+	}
+
+	err := errors.Join(r.ephemeralError, r.terminalError)
+	return len(r.messages) > 0 || err != nil, err
+}
+
+func (r *reconcileStatus) IsError() bool {
+	return r.ephemeralError != nil || r.terminalError != nil
+}
+
+func (r *reconcileStatus) Return() (ctrl.Result, error) {
+	// We don't return terminal errors to controller-runtime. We do still return
+	// ephemeral errors even if there's a terminal error, because this could be
+	// something like a failure to write the status which we'd have to retry
+	// even on a terminal error.
+	if r.ephemeralError != nil {
+		return ctrl.Result{}, r.ephemeralError
+	}
+
+	return ctrl.Result{RequeueAfter: r.requeue}, nil
+}
+
+func (r *reconcileStatus) WithProgressMessage(msgs ...string) ReconcileStatus {
+	if len(msgs) == 0 {
+		return r
+	}
+
+	if r == nil {
+		r = &reconcileStatus{}
+	}
+
+	r.messages = append(r.messages, msgs...)
+	return r
+}
+
+func (r *reconcileStatus) WithRequeue(requeue time.Duration) ReconcileStatus {
+	if requeue == 0 {
+		return r
+	}
+
+	if r == nil {
+		r = &reconcileStatus{}
+	}
+
+	if r.requeue == 0 || requeue < r.requeue {
+		r.requeue = requeue
+	}
+	return r
+}
+
+func (r *reconcileStatus) WithSetNotAvailable() ReconcileStatus {
+	if r == nil {
+		r = &reconcileStatus{}
+	}
+
+	r.setNotAvailable = true
+	return r
+}
+
+func (r *reconcileStatus) WithError(err error) ReconcileStatus {
+	if err == nil {
+		return r
+	}
+
+	if r == nil {
+		r = &reconcileStatus{}
+	}
+
+	if terminalError := (*orcerrors.TerminalError)(nil); errors.As(err, &terminalError) {
+		r.terminalError = terminalError
+	} else {
+		r.ephemeralError = errors.Join(r.ephemeralError, err)
+	}
+
+	return r
+}
+
+func (r *reconcileStatus) WithReconcileStatus(o ReconcileStatus) ReconcileStatus {
+	if r == nil {
+		return o
+	}
+
+	r.WithProgressMessage(o.ProgressMessages()...).
+		WithRequeue(o.Requeue()).
+		WithError(o.EphemeralError()).
+		WithError(o.TerminalError())
+	if o.IsSetNotAvailable() {
+		r.WithSetNotAvailable()
+	}
+
+	return r
+}
+
+type WaitingOnEvent int
 
 const (
-	WaitingOnCreation waitingOnType = iota
+	WaitingOnCreation WaitingOnEvent = iota
 	WaitingOnUpdate
 	WaitingOnReady
 	WaitingOnDeletion
 )
 
-type waitingOnORC struct {
-	kind      string
-	name      string
-	waitingOn waitingOnType
-}
-
-var _ ProgressStatus = waitingOnORC{}
-
-func (e waitingOnORC) Message() string {
+func WaitingOnObject(r ReconcileStatus, kind, name string, waitingOn WaitingOnEvent) ReconcileStatus {
 	var outcome string
-	switch e.waitingOn {
+	switch waitingOn {
 	case WaitingOnCreation:
 		outcome = "created"
 	case WaitingOnUpdate:
@@ -55,120 +222,35 @@ func (e waitingOnORC) Message() string {
 	case WaitingOnDeletion:
 		outcome = "deleted"
 	}
-	return fmt.Sprintf("Waiting for %s/%s to be %s", e.kind, e.name, outcome)
+	r.WithProgressMessage(fmt.Sprintf("Waiting for %s/%s to be %s", kind, name, outcome))
+	return r
 }
 
-func newWaitingOnORC(kind, name string, event waitingOnType) ProgressStatus {
-	return waitingOnORC{
-		kind:      kind,
-		name:      name,
-		waitingOn: event,
-	}
+func WaitingOnFinalizer(r ReconcileStatus, finalizer string) ReconcileStatus {
+	r.WithProgressMessage(fmt.Sprintf("Waiting for finalizer %s to be removed", finalizer))
+	r.WithProgressMessage()
+	return r
 }
 
-func WaitingOnORCExist(kind, name string) ProgressStatus {
-	return newWaitingOnORC(kind, name, WaitingOnCreation)
-}
-
-func WaitingOnORCReady(kind, name string) ProgressStatus {
-	return newWaitingOnORC(kind, name, WaitingOnReady)
-}
-
-func WaitingOnORCDeleted(kind, name string) ProgressStatus {
-	return newWaitingOnORC(kind, name, WaitingOnDeletion)
-}
-
-func (e waitingOnORC) Requeue() time.Duration {
-	return 0
-}
-
-type waitingOnFinalizer struct {
-	finalizer string
-}
-
-func (e waitingOnFinalizer) Message() string {
-	return fmt.Sprintf("Waiting for finalizer %s to be removed", e.finalizer)
-}
-
-func (e waitingOnFinalizer) Requeue() time.Duration {
-	return 0
-}
-
-func WaitingOnFinalizer(finalizer string) ProgressStatus {
-	return waitingOnFinalizer{finalizer: finalizer}
-}
-
-type waitingOnOpenStack struct {
-	waitingOn     waitingOnType
-	pollingPeriod time.Duration
-}
-
-var _ ProgressStatus = waitingOnOpenStack{}
-
-func newWaitingOnOpenStack(event waitingOnType, pollingPeriod time.Duration) ProgressStatus {
-	return waitingOnOpenStack{
-		waitingOn:     event,
-		pollingPeriod: pollingPeriod,
-	}
-}
-
-func WaitingOnOpenStackCreate(pollingPeriod time.Duration) ProgressStatus {
-	return newWaitingOnOpenStack(WaitingOnCreation, pollingPeriod)
-}
-
-func WaitingOnOpenStackUpdate(pollingPeriod time.Duration) ProgressStatus {
-	return newWaitingOnOpenStack(WaitingOnUpdate, pollingPeriod)
-}
-
-func WaitingOnOpenStackReady(pollingPeriod time.Duration) ProgressStatus {
-	return newWaitingOnOpenStack(WaitingOnReady, pollingPeriod)
-}
-
-func WaitingOnOpenStackDeleted(pollingPeriod time.Duration) ProgressStatus {
-	return newWaitingOnOpenStack(WaitingOnDeletion, pollingPeriod)
-}
-
-func (e waitingOnOpenStack) Message() string {
+func WaitingOnOpenStack(r ReconcileStatus, waitingOn WaitingOnEvent, pollingPeriod time.Duration) ReconcileStatus {
 	var outcome string
-	switch e.waitingOn {
+	switch waitingOn {
 	case WaitingOnCreation:
-		outcome = "be created externally"
+		outcome = "created externally"
 	case WaitingOnUpdate:
-		outcome = "be updated"
+		outcome = "updated"
 	case WaitingOnReady:
-		outcome = "be ready"
+		outcome = "ready"
 	case WaitingOnDeletion:
-		outcome = "be deleted"
+		outcome = "deleted"
 	}
-	return fmt.Sprintf("Waiting for OpenStack resource to %s", outcome)
+
+	r.WithProgressMessage(fmt.Sprintf("Waiting for OpenStack resource to be %s", outcome)).
+		WithRequeue(pollingPeriod)
+	return r
 }
 
-func (e waitingOnOpenStack) Requeue() time.Duration {
-	return e.pollingPeriod
-}
-
-type needsRefresh struct{}
-
-var _ ProgressStatus = needsRefresh{}
-
-func (needsRefresh) Message() string {
-	return "Resource status will be refreshed"
-}
-
-func (needsRefresh) Requeue() time.Duration {
-	return 0
-}
-
-func NeedsRefresh() ProgressStatus {
-	return needsRefresh{}
-}
-
-func MaxRequeue(evts []ProgressStatus) time.Duration {
-	var ret time.Duration
-	for _, evt := range evts {
-		if evt.Requeue() > ret {
-			ret = evt.Requeue()
-		}
-	}
-	return ret
+func NeedsRefresh(r ReconcileStatus) ReconcileStatus {
+	r.WithProgressMessage("Resource status will be refreshed")
+	return r
 }

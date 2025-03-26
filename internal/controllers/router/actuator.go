@@ -74,7 +74,7 @@ func (actuator routerActuator) ListOSResourcesForAdoption(ctx context.Context, o
 	return actuator.osClient.ListRouter(ctx, listOpts), true
 }
 
-func (actuator routerCreateActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ProgressStatus, iter.Seq2[*osResourceT, error], error) {
+func (actuator routerCreateActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ReconcileStatus, iter.Seq2[*osResourceT, error], error) {
 	listOpts := routers.ListOpts{
 		Name:        string(ptr.Deref(filter.Name, "")),
 		Description: string(ptr.Deref(filter.Description, "")),
@@ -87,7 +87,7 @@ func (actuator routerCreateActuator) ListOSResourcesForImport(ctx context.Contex
 	return nil, actuator.osClient.ListRouter(ctx, listOpts), nil
 }
 
-func (actuator routerCreateActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Router) ([]progress.ProgressStatus, *routers.Router, error) {
+func (actuator routerCreateActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Router) ([]progress.ReconcileStatus, *routers.Router, error) {
 	resource := obj.Spec.Resource
 	if resource == nil {
 		// Should have been caught by API validation
@@ -97,7 +97,7 @@ func (actuator routerCreateActuator) CreateResource(ctx context.Context, obj *or
 	gatewayInfo := &routers.GatewayInfo{}
 
 	if len(resource.ExternalGateways) > 0 {
-		var progressStatus []progress.ProgressStatus
+		var progressStatus []progress.ReconcileStatus
 
 		// Fetch dependencies and ensure they have our finalizer
 		externalGW, progressStatus, err := externalGWDep.GetDependency(
@@ -136,7 +136,7 @@ func (actuator routerCreateActuator) CreateResource(ctx context.Context, obj *or
 	return nil, osResource, err
 }
 
-func (actuator routerActuator) DeleteResource(ctx context.Context, _ orcObjectPT, router *routers.Router) ([]progress.ProgressStatus, error) {
+func (actuator routerActuator) DeleteResource(ctx context.Context, _ orcObjectPT, router *routers.Router) ([]progress.ReconcileStatus, error) {
 	return nil, actuator.osClient.DeleteRouter(ctx, router.ID)
 }
 
@@ -156,17 +156,17 @@ func (routerHelperFactory) NewAPIObjectAdapter(obj orcObjectPT) adapterI {
 	return routerAdapter{obj}
 }
 
-func (routerHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, createResourceActuator, error) {
+func (routerHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, createResourceActuator, error) {
 	actuator, progressStatus, err := newCreateActuator(ctx, orcObject, controller)
 	return progressStatus, actuator, err
 }
 
-func (routerHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, deleteResourceActuator, error) {
+func (routerHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, deleteResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, orcObject, controller)
 	return progressStatus, actuator, err
 }
 
-func newActuator(ctx context.Context, orcObject *orcv1alpha1.Router, controller interfaces.ResourceController) (routerActuator, []progress.ProgressStatus, error) {
+func newActuator(ctx context.Context, orcObject *orcv1alpha1.Router, controller interfaces.ResourceController) (routerActuator, []progress.ReconcileStatus, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	// Ensure credential secrets exist and have our finalizer
@@ -189,7 +189,7 @@ func newActuator(ctx context.Context, orcObject *orcv1alpha1.Router, controller 
 	}, nil, nil
 }
 
-func newCreateActuator(ctx context.Context, orcObject *orcv1alpha1.Router, controller interfaces.ResourceController) (routerCreateActuator, []progress.ProgressStatus, error) {
+func newCreateActuator(ctx context.Context, orcObject *orcv1alpha1.Router, controller interfaces.ResourceController) (routerCreateActuator, []progress.ReconcileStatus, error) {
 	routerActuator, progressStatus, err := newActuator(ctx, orcObject, controller)
 	if len(progressStatus) > 0 || err != nil {
 		return routerCreateActuator{}, progressStatus, err

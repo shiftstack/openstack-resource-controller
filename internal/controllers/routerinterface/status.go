@@ -40,7 +40,7 @@ type updateStatusOpts struct {
 	err    error
 }
 
-func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *updateStatusOpts) (_ metav1.ConditionStatus, progressStatus []progress.ProgressStatus) {
+func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *updateStatusOpts) (_ metav1.ConditionStatus, progressStatus []progress.ReconcileStatus) {
 	// Probably a programming error?
 	if routerInterface == nil {
 		return metav1.ConditionFalse, nil

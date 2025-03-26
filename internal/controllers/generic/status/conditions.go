@@ -26,14 +26,19 @@ import (
 	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
 	"github.com/k-orc/openstack-resource-controller/internal/controllers/generic/progress"
 	"github.com/k-orc/openstack-resource-controller/internal/util/applyconfigs"
-	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
 )
 
 type WithConditionsApplyConfiguration[T any] interface {
 	WithConditions(...*applyconfigv1.ConditionApplyConfiguration) T
 }
 
-func SetCommonConditions[T any](orcObject orcv1alpha1.ObjectWithConditions, applyConfig WithConditionsApplyConfiguration[T], availableStatus metav1.ConditionStatus, progressStatus []progress.ProgressStatus, err error, now metav1.Time) {
+func SetCommonConditions[T any](
+	orcObject orcv1alpha1.ObjectWithConditions,
+	applyConfig WithConditionsApplyConfiguration[T],
+	availableStatus metav1.ConditionStatus,
+	reconcileStatus progress.ReconcileStatus,
+	now metav1.Time,
+) {
 	availableCondition := applyconfigv1.Condition().
 		WithType(orcv1alpha1.ConditionAvailable).
 		WithStatus(availableStatus).
@@ -45,37 +50,30 @@ func SetCommonConditions[T any](orcObject orcv1alpha1.ObjectWithConditions, appl
 	// We are Progressing iff we are anticipating being reconciled again. This
 	// means one of:
 	// - err contains a non-terminal error, so we expect an error backoff
-	// - progressStatus is non-empty, so the actuator has either specified a
-	//   polling period, or is expecting another triggering k8s event
+	// - reconcileStatus does not indicate that we are waiting on some condition
 
-	if err != nil {
-		var terminalError *orcerrors.TerminalError
-		if errors.As(err, &terminalError) {
-			progressingCondition.
-				WithStatus(metav1.ConditionFalse).
-				WithReason(terminalError.Reason).
-				WithMessage(terminalError.Message)
-		} else {
-			progressingCondition.
-				WithStatus(metav1.ConditionTrue).
-				WithReason(orcv1alpha1.ConditionReasonTransientError).
-				WithMessage(err.Error())
-		}
-	} else if len(progressStatus) > 0 {
-		messages := make([]string, len(progressStatus))
-		for i := range progressStatus {
-			messages[i] = progressStatus[i].Message()
-		}
-
-		progressingCondition.
-			WithStatus(metav1.ConditionTrue).
-			WithReason(orcv1alpha1.ConditionReasonProgressing).
-			WithMessage(strings.Join(messages, "; "))
-	} else {
+	if needsReschedule, _ := reconcileStatus.NeedsReschedule(); !needsReschedule {
 		progressingCondition.
 			WithStatus(metav1.ConditionFalse).
 			WithReason(orcv1alpha1.ConditionReasonSuccess).
 			WithMessage("OpenStack resource is up to date")
+	} else {
+		if err := reconcileStatus.EphemeralError(); err != nil {
+			progressingCondition.
+				WithStatus(metav1.ConditionTrue).
+				WithReason(orcv1alpha1.ConditionReasonTransientError).
+				WithMessage(errors.Join(err, reconcileStatus.TerminalError()).Error())
+		} else if err := reconcileStatus.TerminalError(); err != nil {
+			progressingCondition.
+				WithStatus(metav1.ConditionFalse).
+				WithReason(err.Reason).
+				WithMessage(err.Message)
+		} else {
+			progressingCondition.
+				WithStatus(metav1.ConditionTrue).
+				WithReason(orcv1alpha1.ConditionReasonProgressing).
+				WithMessage(strings.Join(reconcileStatus.ProgressMessages(), "\n"))
+		}
 	}
 
 	if availableStatus == metav1.ConditionTrue {

@@ -73,7 +73,7 @@ func (actuator portActuator) ListOSResourcesForAdoption(ctx context.Context, obj
 	return actuator.osClient.ListPort(ctx, listOpts), true
 }
 
-func (actuator portActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ProgressStatus, iter.Seq2[*osResourceT, error], error) {
+func (actuator portActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ReconcileStatus, iter.Seq2[*osResourceT, error], error) {
 	var networkID string
 	var progressStatus []progress.ProgressStatus
 
@@ -112,14 +112,14 @@ func (actuator portActuator) ListOSResourcesForImport(ctx context.Context, obj o
 	return nil, actuator.osClient.ListPort(ctx, listOpts), nil
 }
 
-func (actuator portActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Port) ([]progress.ProgressStatus, *ports.Port, error) {
+func (actuator portActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Port) ([]progress.ReconcileStatus, *ports.Port, error) {
 	resource := obj.Spec.Resource
 	if resource == nil {
 		// Should have been caught by API validation
 		return nil, nil, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "Creation requested, but spec.resource is not set")
 	}
 
-	var progressStatus []progress.ProgressStatus
+	var progressStatus []progress.ReconcileStatus
 
 	// Fetch all dependencies and ensure they have our finalizer
 	network, networkProgress, networkErr := networkDependency.GetDependency(
@@ -207,7 +207,7 @@ func (actuator portActuator) CreateResource(ctx context.Context, obj *orcv1alpha
 	return nil, osResource, nil
 }
 
-func (actuator portActuator) DeleteResource(ctx context.Context, _ *orcv1alpha1.Port, flavor *ports.Port) ([]progress.ProgressStatus, error) {
+func (actuator portActuator) DeleteResource(ctx context.Context, _ *orcv1alpha1.Port, flavor *ports.Port) ([]progress.ReconcileStatus, error) {
 	return nil, actuator.osClient.DeletePort(ctx, flavor.ID)
 }
 
@@ -227,17 +227,17 @@ func (portHelperFactory) NewAPIObjectAdapter(obj orcObjectPT) adapterI {
 	return portAdapter{obj}
 }
 
-func (portHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, createResourceActuator, error) {
+func (portHelperFactory) NewCreateActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, createResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, controller, orcObject)
 	return progressStatus, actuator, err
 }
 
-func (portHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ProgressStatus, deleteResourceActuator, error) {
+func (portHelperFactory) NewDeleteActuator(ctx context.Context, orcObject orcObjectPT, controller interfaces.ResourceController) ([]progress.ReconcileStatus, deleteResourceActuator, error) {
 	actuator, progressStatus, err := newActuator(ctx, controller, orcObject)
 	return progressStatus, actuator, err
 }
 
-func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Port) (portActuator, []progress.ProgressStatus, error) {
+func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Port) (portActuator, []progress.ReconcileStatus, error) {
 	if orcObject == nil {
 		return portActuator{}, nil, fmt.Errorf("orcObject may not be nil")
 	}

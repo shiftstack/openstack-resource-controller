@@ -75,7 +75,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 		orcObject  orcObjectPT
 		osResource *osResourceT
 		expect     func(*mock.MockNetworkClientMockRecorder)
-		wantEvents []progress.ProgressStatus
+		wantEvents []progress.ReconcileStatus
 		wantErrs   []error
 	}{
 		{
@@ -115,7 +115,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 				}
 				recorder.CreateSecGroupRules(gomock.Any(), []rules.CreateOpts{createOpts}).Return(nil, nil)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 		},
@@ -164,7 +164,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 			expect: func(recorder *mock.MockNetworkClientMockRecorder) {
 				recorder.DeleteSecGroupRule(gomock.Any(), ruleID).Return(nil)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 		},
@@ -207,7 +207,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 				recorder.CreateSecGroupRules(gomock.Any(), []rules.CreateOpts{createOpts}).Return(nil, nil)
 				recorder.DeleteSecGroupRule(gomock.Any(), ruleID).Return(nil)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 		},
@@ -259,7 +259,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 				}
 				recorder.CreateSecGroupRules(gomock.Any(), []rules.CreateOpts{createOpts}).Return(nil, nil)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 		},
@@ -302,7 +302,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 				recorder.CreateSecGroupRules(gomock.Any(), []rules.CreateOpts{createOpts}).Return(nil, createError)
 				recorder.DeleteSecGroupRule(gomock.Any(), ruleID).Return(nil)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 			wantErrs: []error{createError},
@@ -357,7 +357,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 				recorder.DeleteSecGroupRule(gomock.Any(), ruleID).Return(deleteError)
 				recorder.DeleteSecGroupRule(gomock.Any(), ruleID2).Return(nil)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 			wantErrs: []error{deleteError},
@@ -401,7 +401,7 @@ func Test_securityGroupActuator_updateRules(t *testing.T) {
 				recorder.CreateSecGroupRules(gomock.Any(), []rules.CreateOpts{createOpts}).Return(nil, createError)
 				recorder.DeleteSecGroupRule(gomock.Any(), ruleID).Return(deleteError)
 			},
-			wantEvents: []progress.ProgressStatus{
+			wantEvents: []progress.ReconcileStatus{
 				progress.WaitingOnOpenStackUpdate(time.Second),
 			},
 			wantErrs: []error{createError, deleteError},

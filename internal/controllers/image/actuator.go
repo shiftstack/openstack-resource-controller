@@ -47,7 +47,7 @@ type imageActuator struct {
 	osClient osclients.ImageClient
 }
 
-func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Image) (imageActuator, []progress.ProgressStatus, error) {
+func newActuator(ctx context.Context, controller interfaces.ResourceController, orcObject *orcv1alpha1.Image) (imageActuator, []progress.ReconcileStatus, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	// Ensure credential secrets exist and have our finalizer
@@ -101,7 +101,7 @@ func (actuator imageActuator) ListOSResourcesForAdoption(ctx context.Context, ob
 	return existingImage, true
 }
 
-func (actuator imageActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ProgressStatus, imageIterator, error) {
+func (actuator imageActuator) ListOSResourcesForImport(ctx context.Context, obj orcObjectPT, filter filterT) ([]progress.ReconcileStatus, imageIterator, error) {
 	listOpts := images.ListOpts{
 		Name: string(ptr.Deref(filter.Name, "")),
 	}
@@ -116,7 +116,7 @@ func (actuator imageActuator) ListOSResourcesForImport(ctx context.Context, obj 
 	return nil, actuator.osClient.ListImages(ctx, listOpts), nil
 }
 
-func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Image) ([]progress.ProgressStatus, *images.Image, error) {
+func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alpha1.Image) ([]progress.ReconcileStatus, *images.Image, error) {
 	resource := obj.Spec.Resource
 	if resource == nil {
 		// Should have been caught by API validation
@@ -176,7 +176,7 @@ func (actuator imageActuator) CreateResource(ctx context.Context, obj *orcv1alph
 	return nil, image, err
 }
 
-func (actuator imageActuator) DeleteResource(ctx context.Context, _ orcObjectPT, osResource *images.Image) ([]progress.ProgressStatus, error) {
+func (actuator imageActuator) DeleteResource(ctx context.Context, _ orcObjectPT, osResource *images.Image) ([]progress.ReconcileStatus, error) {
 	return nil, actuator.osClient.DeleteImage(ctx, osResource.ID)
 }
 
