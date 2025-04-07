@@ -105,16 +105,20 @@ func GetOrCreateOSResource[
 
 	// Import by filter
 	if filter := objAdapter.GetImportFilter(); filter != nil {
-		// XXX: This should return something on not found
 		resourceIter, listResourceRS := actuator.ListOSResourcesForImport(ctx, objAdapter.GetObject(), *filter)
 		if needsReschedule, _ := listResourceRS.NeedsReschedule(); needsReschedule {
 			return nil, listResourceRS.WithReconcileStatus(reconcileStatus)
 		}
-		if osResource, err := atMostOne(resourceIter, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "found more than one matching OpenStack resource during import")); err != nil {
+
+		osResource, err := atMostOne(resourceIter, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "found more than one matching OpenStack resource during import"))
+		if err != nil {
 			return nil, reconcileStatus.WithError(err)
-		} else {
-			return osResource, reconcileStatus
 		}
+
+		if osResource == nil {
+			return nil, progress.WaitingOnOpenStack(reconcileStatus, progress.WaitingOnCreation, externalUpdatePollingPeriod)
+		}
+		return osResource, reconcileStatus
 	}
 
 	// Create

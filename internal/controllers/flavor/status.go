@@ -23,6 +23,7 @@ import (
 
 	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
 	"github.com/k-orc/openstack-resource-controller/internal/controllers/generic/interfaces"
+	"github.com/k-orc/openstack-resource-controller/internal/controllers/generic/progress"
 	orcapplyconfigv1alpha1 "github.com/k-orc/openstack-resource-controller/pkg/clients/applyconfiguration/api/v1alpha1"
 )
 
@@ -37,17 +38,17 @@ func (flavorStatusWriter) GetApplyConfig(name, namespace string) *objectApplyT {
 	return orcapplyconfigv1alpha1.Flavor(name, namespace)
 }
 
-func (flavorStatusWriter) ResourceAvailableStatus(orcObject *orcv1alpha1.Flavor, osResource *flavors.Flavor) metav1.ConditionStatus {
+func (flavorStatusWriter) ResourceAvailableStatus(orcObject *orcv1alpha1.Flavor, osResource *flavors.Flavor, _ progress.ReconcileStatus) (metav1.ConditionStatus, progress.ReconcileStatus) {
 	if osResource == nil {
 		if orcObject.Status.ID == nil {
-			return metav1.ConditionFalse
+			return metav1.ConditionFalse, nil
 		} else {
-			return metav1.ConditionUnknown
+			return metav1.ConditionUnknown, nil
 		}
 	}
 
 	// Flavor is available as soon as it exists
-	return metav1.ConditionTrue
+	return metav1.ConditionTrue, nil
 }
 
 func (flavorStatusWriter) ApplyResourceStatus(_ logr.Logger, osResource *flavors.Flavor, statusApply *statusApplyT) {

@@ -179,10 +179,17 @@ func (c *Controller[
 
 	// Ensure we always update status
 	defer func() {
-		reconcileStatus = status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource, reconcileStatus)
+		updateRS := status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource)
+		if updateRS.EphemeralError() != nil {
+			reconcileStatus.WithError(err)
+		}
 
-		if reconcileStatus.EphemeralError() == nil && reconcileStatus.TerminalError() != nil {
+		if reconcileStatus.TerminalError() != nil {
+			if reconcileStatus.EphemeralError() != nil {
+				log.Error(reconcileStatus.EphemeralError(), "Not returning ephemeral error due to terminal error")
+			}
 			log.V(logging.Info).Info("not scheduling further reconciles for terminal error", "err", reconcileStatus.TerminalError().Error())
+			reconcileStatus = progress.NewReconcileError(reconcileStatus.TerminalError())
 		}
 	}()
 

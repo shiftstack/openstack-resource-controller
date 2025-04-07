@@ -79,7 +79,7 @@ func UpdateStatus[
 	ctx context.Context,
 	controller interfaces.ResourceController,
 	statusWriter interfaces.ResourceStatusWriter[orcObjectPT, osResourcePT, objectApplyPT, statusApplyPT],
-	orcObject orcObjectPT, osResource osResourcePT, reconcileStatus progress.ReconcileStatus,
+	orcObject orcObjectPT, osResource osResourcePT,
 ) progress.ReconcileStatus {
 	log := ctrl.LoggerFrom(ctx)
 	now := metav1.NewTime(time.Now())
@@ -95,7 +95,7 @@ func UpdateStatus[
 	}
 
 	// Set common conditions
-	available, reconcileStatus := statusWriter.ResourceAvailableStatus(orcObject, osResource, reconcileStatus)
+	available, reconcileStatus := statusWriter.ResourceAvailableStatus(orcObject, osResource)
 	SetCommonConditions(orcObject, applyConfigStatus, available, reconcileStatus, now)
 
 	// Patch orcObject with the status transaction

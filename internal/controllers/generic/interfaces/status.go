@@ -50,7 +50,7 @@ type ResourceStatusWriter[objectPT orcv1alpha1.ObjectWithConditions, osResourceP
 	// ResourceAvailableStatus returns what the status of the Available
 	// condition should be set to based on the observed state of the given
 	// orcObject and osResource.
-	ResourceAvailableStatus(orcObject objectPT, osResource osResourcePT, reconcileStatus progress.ReconcileStatus) (metav1.ConditionStatus, progress.ReconcileStatus)
+	ResourceAvailableStatus(orcObject objectPT, osResource osResourcePT) (metav1.ConditionStatus, progress.ReconcileStatus)
 
 	// ApplyResourceStatus writes status.resource to the given status apply
 	// configuration based on the given osResource
