@@ -24,8 +24,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/go-logr/logr"
-	"github.com/k-orc/openstack-resource-controller/internal/logging"
-	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
+	"github.com/k-orc/openstack-resource-controller/v2/internal/logging"
+	orcerrors "github.com/k-orc/openstack-resource-controller/v2/internal/util/errors"
 )
 
 type ReconcileStatus interface {

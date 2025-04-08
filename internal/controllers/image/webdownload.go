@@ -25,10 +25,9 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/api/v1alpha1"
-	"github.com/k-orc/openstack-resource-controller/internal/logging"
-	osclients "github.com/k-orc/openstack-resource-controller/internal/osclients"
-	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
+	orcv1alpha1 "github.com/k-orc/openstack-resource-controller/v2/api/v1alpha1"
+	"github.com/k-orc/openstack-resource-controller/v2/internal/logging"
+	orcerrors "github.com/k-orc/openstack-resource-controller/v2/internal/util/errors"
 )
 
 func requireResource(orcImage *orcv1alpha1.Image) (*orcv1alpha1.ImageResourceSpec, error) {
@@ -51,7 +50,7 @@ func requireResourceContent(orcImage *orcv1alpha1.Image) (*orcv1alpha1.ImageCont
 	return resource.Content, nil
 }
 
-func (r *orcImageReconciler) canWebDownload(ctx context.Context, orcImage *orcv1alpha1.Image, imageClient osclients.ImageClient) (bool, error) {
+func (actuator imageActuator) canWebDownload(ctx context.Context, orcImage *orcv1alpha1.Image) (bool, error) {
 	log := ctrl.LoggerFrom(ctx)
 
 	debugLog := func(reason string, extra ...any) {
@@ -95,7 +94,7 @@ func (r *orcImageReconciler) canWebDownload(ctx context.Context, orcImage *orcv1
 	}
 
 	// Get supported import methods from Glance
-	importInfo, err := imageClient.GetImportInfo(ctx)
+	importInfo, err := actuator.osClient.GetImportInfo(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +107,7 @@ func (r *orcImageReconciler) canWebDownload(ctx context.Context, orcImage *orcv1
 	return true, nil
 }
 
-func (r *orcImageReconciler) webDownload(ctx context.Context, orcImage *orcv1alpha1.Image, imageClient osclients.ImageClient, glanceImage *images.Image) error {
+func (actuator imageActuator) webDownload(ctx context.Context, orcImage *orcv1alpha1.Image, glanceImage *images.Image) error {
 	log := ctrl.LoggerFrom(ctx)
 	log.V(logging.Verbose).Info("Importing with web-download")
 
@@ -123,7 +122,7 @@ func (r *orcImageReconciler) webDownload(ctx context.Context, orcImage *orcv1alp
 		return err
 	}
 
-	return imageClient.CreateImport(ctx, glanceImage.ID, &imageimport.CreateOpts{
+	return actuator.osClient.CreateImport(ctx, glanceImage.ID, &imageimport.CreateOpts{
 		Name: imageimport.WebDownloadMethod,
 		URI:  content.Download.URL,
 	})
