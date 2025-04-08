@@ -64,7 +64,7 @@ func GetOrCreateOSResource[
 	if !controllerutil.ContainsFinalizer(objAdapter.GetObject(), finalizer) {
 		patch := finalizers.SetFinalizerPatch(objAdapter.GetObject(), finalizer)
 		if err := k8sClient.Patch(ctx, objAdapter.GetObject(), patch, client.ForceOwnership, orcstrings.GetSSAFieldOwnerWithTxn(controller.GetName(), orcstrings.SSATransactionFinalizer)); err != nil {
-			return nil, progress.NewReconcileError(fmt.Errorf("setting finalizer: %w", err))
+			return nil, progress.WrapError(fmt.Errorf("setting finalizer: %w", err))
 		}
 	}
 

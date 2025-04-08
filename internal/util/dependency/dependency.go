@@ -232,7 +232,7 @@ func (d *DeletionGuardDependency[objectTP, _, _, _, _, _]) addDeletionGuard(mgr 
 func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependencies(ctx context.Context, k8sClient client.Client, obj objectTP, readyFilter func(depTP) bool) (map[string]depTP, progress.ReconcileStatus) {
 	depKind, err := getObjectKind(depTP(new(depT)), k8sClient.Scheme())
 	if err != nil {
-		return nil, progress.NewReconcileError(err)
+		return nil, progress.WrapError(err)
 	}
 
 	reconcileStatus := progress.NewReconcileStatus()
@@ -276,13 +276,13 @@ func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependency(
 	}
 	if len(depsMap) > 1 {
 		// Programming error
-		return nil, progress.NewReconcileError(fmt.Errorf("GetDependencies returned multiple dependencies, expected one"))
+		return nil, progress.WrapError(fmt.Errorf("GetDependencies returned multiple dependencies, expected one"))
 	}
 	for _, dep := range depsMap {
 		return dep, nil
 	}
 	// Programming error
-	return nil, progress.NewReconcileError(fmt.Errorf("GetDependencies returned empty depsMap, progressStatus, and error"))
+	return nil, progress.WrapError(fmt.Errorf("GetDependencies returned empty depsMap, progressStatus, and error"))
 }
 
 func (d *DeletionGuardDependency[objectTP, objectListTP, depTP, objectT, objectListT, depT]) AddToManager(ctx context.Context, mgr ctrl.Manager) error {

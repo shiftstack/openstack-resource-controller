@@ -38,7 +38,7 @@ func (flavorStatusWriter) GetApplyConfig(name, namespace string) *objectApplyT {
 	return orcapplyconfigv1alpha1.Flavor(name, namespace)
 }
 
-func (flavorStatusWriter) ResourceAvailableStatus(orcObject *orcv1alpha1.Flavor, osResource *flavors.Flavor, _ progress.ReconcileStatus) (metav1.ConditionStatus, progress.ReconcileStatus) {
+func (flavorStatusWriter) ResourceAvailableStatus(orcObject *orcv1alpha1.Flavor, osResource *flavors.Flavor) (metav1.ConditionStatus, progress.ReconcileStatus) {
 	if osResource == nil {
 		if orcObject.Status.ID == nil {
 			return metav1.ConditionFalse, nil

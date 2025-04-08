@@ -123,11 +123,12 @@ func (c *Controller[
 
 	adapter := c.helperFactory.NewAPIObjectAdapter(orcObject)
 
+	log := ctrl.LoggerFrom(ctx)
 	if !orcObject.GetDeletionTimestamp().IsZero() {
-		return c.reconcileDelete(ctx, adapter).Return()
+		return c.reconcileDelete(ctx, adapter).Return(log)
 	}
 
-	return c.reconcileNormal(ctx, adapter).Return()
+	return c.reconcileNormal(ctx, adapter).Return(log)
 }
 
 // shouldReconcile filters events when the object status is up to date, and its
@@ -179,18 +180,8 @@ func (c *Controller[
 
 	// Ensure we always update status
 	defer func() {
-		updateRS := status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource)
-		if updateRS.EphemeralError() != nil {
-			reconcileStatus.WithError(err)
-		}
-
-		if reconcileStatus.TerminalError() != nil {
-			if reconcileStatus.EphemeralError() != nil {
-				log.Error(reconcileStatus.EphemeralError(), "Not returning ephemeral error due to terminal error")
-			}
-			log.V(logging.Info).Info("not scheduling further reconciles for terminal error", "err", reconcileStatus.TerminalError().Error())
-			reconcileStatus = progress.NewReconcileError(reconcileStatus.TerminalError())
-		}
+		reconcileStatus = reconcileStatus.WithReconcileStatus(
+			status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource))
 	}()
 
 	actuator, actuatorRS := c.helperFactory.NewCreateActuator(ctx, objAdapter.GetObject(), c)
@@ -260,7 +251,7 @@ func (c *Controller[
 		// No point updating status after removing the finalizer
 		if !deleted {
 			reconcileStatus = reconcileStatus.WithReconcileStatus(
-				status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource, reconcileStatus))
+				status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource))
 		}
 	}()
 

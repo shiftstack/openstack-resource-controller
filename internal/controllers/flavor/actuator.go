@@ -62,7 +62,7 @@ func (flavorActuator) GetResourceID(osResource *flavors.Flavor) string {
 func (actuator flavorActuator) GetOSResourceByID(ctx context.Context, id string) (*flavors.Flavor, progress.ReconcileStatus) {
 	flavor, err := actuator.osClient.GetFlavor(ctx, id)
 	if err != nil {
-		return nil, progress.NewReconcileError(err)
+		return nil, progress.WrapError(err)
 	}
 	return flavor, nil
 }
@@ -139,7 +139,7 @@ func (actuator flavorActuator) CreateResource(ctx context.Context, obj orcObject
 
 	if resource == nil {
 		// Should have been caught by API validation
-		return nil, progress.NewReconcileError(
+		return nil, progress.WrapError(
 			orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "Creation requested, but spec.resource is not set"))
 	}
 
@@ -160,14 +160,14 @@ func (actuator flavorActuator) CreateResource(ctx context.Context, obj orcObject
 		if !orcerrors.IsRetryable(err) {
 			err = orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "invalid configuration creating resource: "+err.Error(), err)
 		}
-		return nil, progress.NewReconcileError(err)
+		return nil, progress.WrapError(err)
 	}
 
 	return osResource, nil
 }
 
 func (actuator flavorActuator) DeleteResource(ctx context.Context, _ orcObjectPT, flavor *flavors.Flavor) progress.ReconcileStatus {
-	return progress.NewReconcileError(actuator.osClient.DeleteFlavor(ctx, flavor.ID))
+	return progress.WrapError(actuator.osClient.DeleteFlavor(ctx, flavor.ID))
 }
 
 type flavorHelperFactory struct{}
@@ -185,11 +185,11 @@ func newActuator(ctx context.Context, orcObject *orcv1alpha1.Flavor, controller 
 
 	clientScope, err := controller.GetScopeFactory().NewClientScopeFromObject(ctx, controller.GetK8sClient(), log, orcObject)
 	if err != nil {
-		return flavorActuator{}, progress.NewReconcileError(err)
+		return flavorActuator{}, progress.WrapError(err)
 	}
 	osClient, err := clientScope.NewComputeClient()
 	if err != nil {
-		return flavorActuator{}, progress.NewReconcileError(err)
+		return flavorActuator{}, progress.WrapError(err)
 	}
 
 	return flavorActuator{

@@ -61,7 +61,7 @@ func ReconcileTags[orcObjectPT, osResourceT any](
 			opts := attributestags.ReplaceAllOpts{Tags: specTagSet.SortedList()}
 			_, err := networkClient.ReplaceAllAttributesTags(ctx, resourceType, resourceID, &opts)
 			if err == nil {
-				return progress.NewReconcileError(err)
+				return progress.WrapError(err)
 			}
 			// If we updated the tags we need another reconcile to refresh the resource status
 			return progress.NeedsRefresh(progress.NewReconcileStatus())

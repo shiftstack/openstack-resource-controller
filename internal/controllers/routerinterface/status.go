@@ -40,17 +40,18 @@ type updateStatusOpts struct {
 	err    error
 }
 
-func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *updateStatusOpts) (_ metav1.ConditionStatus, progressStatus []progress.ReconcileStatus) {
+func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *updateStatusOpts) (metav1.ConditionStatus, progress.ReconcileStatus) {
 	// Probably a programming error?
 	if routerInterface == nil {
 		return metav1.ConditionFalse, nil
 	}
 
+	reconcileStatus := progress.NewReconcileStatus()
 	if routerInterface.Spec.Type == orcv1alpha1.RouterInterfaceTypeSubnet {
 		if opts.subnet == nil {
-			progressStatus = append(progressStatus, progress.WaitingOnORCExist("Subnet", string(*routerInterface.Spec.SubnetRef)))
+			reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Subnet", string(*routerInterface.Spec.SubnetRef), progress.WaitingOnCreation)
 		} else if opts.subnet.Status.ID == nil {
-			progressStatus = append(progressStatus, progress.WaitingOnORCReady("Subnet", string(*routerInterface.Spec.SubnetRef)))
+			reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Subnet", string(*routerInterface.Spec.SubnetRef), progress.WaitingOnReady)
 		}
 	}
 
@@ -59,11 +60,11 @@ func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *update
 		if opts.port.Status == port.PortStatusActive {
 			available = metav1.ConditionTrue
 		} else {
-			progressStatus = append(progressStatus, progress.WaitingOnOpenStackReady(portStatusPollingPeriod))
+			reconcileStatus = progress.WaitingOnOpenStack(reconcileStatus, progress.WaitingOnReady, portStatusPollingPeriod)
 		}
 	}
 
-	return available, progressStatus
+	return available, reconcileStatus
 }
 
 // createStatusUpdate computes a complete status update based on the given
@@ -80,8 +81,8 @@ func createStatusUpdate(orcObject *orcv1alpha1.RouterInterface, now metav1.Time,
 		applyConfigStatus.WithID(statusOpts.port.ID)
 	}
 
-	isAvailable, progressStatus := getStatusSummary(orcObject, statusOpts)
-	status.SetCommonConditions(orcObject, applyConfigStatus, isAvailable, progressStatus, statusOpts.err, now)
+	isAvailable, reconcileStatus := getStatusSummary(orcObject, statusOpts)
+	status.SetCommonConditions(orcObject, applyConfigStatus, isAvailable, reconcileStatus, now)
 
 	return applyConfig
 }

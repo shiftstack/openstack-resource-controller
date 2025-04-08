@@ -23,6 +23,8 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/go-logr/logr"
+	"github.com/k-orc/openstack-resource-controller/internal/logging"
 	orcerrors "github.com/k-orc/openstack-resource-controller/internal/util/errors"
 )
 
@@ -33,7 +35,7 @@ type ReconcileStatus interface {
 	TerminalError() *orcerrors.TerminalError
 
 	Requeue() time.Duration
-	Return() (ctrl.Result, error)
+	Return(logr.Logger) (ctrl.Result, error)
 
 	IsSetNotAvailable() bool
 	NeedsReschedule() (bool, error)
@@ -61,7 +63,7 @@ func NewReconcileStatus() ReconcileStatus {
 	return (*reconcileStatus)(nil)
 }
 
-func NewReconcileError(err error) ReconcileStatus {
+func WrapError(err error) ReconcileStatus {
 	return NewReconcileStatus().WithError(err)
 }
 
@@ -118,11 +120,13 @@ func (r *reconcileStatus) IsError() bool {
 	return r.ephemeralError != nil || r.terminalError != nil
 }
 
-func (r *reconcileStatus) Return() (ctrl.Result, error) {
-	// We don't return terminal errors to controller-runtime. We do still return
-	// ephemeral errors even if there's a terminal error, because this could be
-	// something like a failure to write the status which we'd have to retry
-	// even on a terminal error.
+func (r *reconcileStatus) Return(log logr.Logger) (ctrl.Result, error) {
+	if r.terminalError != nil {
+		err := errors.Join(r.ephemeralError, r.terminalError)
+		log.V(logging.Info).Info("not scheduling further reconciles for terminal error", "err", err.Error())
+		return ctrl.Result{}, nil
+	}
+
 	if r.ephemeralError != nil {
 		return ctrl.Result{}, r.ephemeralError
 	}
