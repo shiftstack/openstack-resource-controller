@@ -85,13 +85,13 @@ func (actuator portActuator) ListOSResourcesForImport(ctx context.Context, obj o
 			networkKey := client.ObjectKey{Name: string(filter.NetworkRef), Namespace: obj.Namespace}
 			if err := actuator.k8sClient.Get(ctx, networkKey, network); err != nil {
 				if apierrors.IsNotFound(err) {
-					return nil, progress.WaitingOnObject(nil, "Network", networkKey.Name, progress.WaitingOnCreation)
+					return nil, progress.WaitingOnObject("Network", networkKey.Name, progress.WaitingOnCreation)
 				} else {
 					return nil, progress.WrapError(fmt.Errorf("fetching network %s: %w", networkKey.Name, err))
 				}
 			} else {
 				if !orcv1alpha1.IsAvailable(network) || network.Status.ID == nil {
-					return nil, progress.WaitingOnObject(nil, "Network", networkKey.Name, progress.WaitingOnReady)
+					return nil, progress.WaitingOnObject("Network", networkKey.Name, progress.WaitingOnReady)
 				}
 			}
 			networkID = *network.Status.ID
@@ -134,6 +134,12 @@ func (actuator portActuator) CreateResource(ctx context.Context, obj *orcv1alpha
 			return dep.Status.ID != nil
 		},
 	)
+	{
+		log := ctrl.LoggerFrom(ctx)
+		log.V(1).Info("networkDepRS", "value", fmt.Sprintf("%+v", networkDepRS))
+		log.V(1).Info("subnetDepRS", "value", fmt.Sprintf("%+v", subnetDepRS))
+		log.V(1).Info("secGroupDepRS", "value", fmt.Sprintf("%+v", secGroupDepRS))
+	}
 	reconcileStatus := progress.NewReconcileStatus().
 		WithReconcileStatus(networkDepRS).
 		WithReconcileStatus(subnetDepRS).

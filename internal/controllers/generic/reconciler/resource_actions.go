@@ -58,8 +58,6 @@ func GetOrCreateOSResource[
 ) (*osResourceT, progress.ReconcileStatus) {
 	k8sClient := controller.GetK8sClient()
 
-	reconcileStatus := progress.NewReconcileStatus()
-
 	finalizer := orcstrings.GetFinalizerName(controller.GetName())
 	if !controllerutil.ContainsFinalizer(objAdapter.GetObject(), finalizer) {
 		patch := finalizers.SetFinalizerPatch(objAdapter.GetObject(), finalizer)
@@ -69,14 +67,14 @@ func GetOrCreateOSResource[
 	}
 
 	if resourceID := objAdapter.GetStatusID(); resourceID != nil {
-		osResource, getOSResourceRS := actuator.GetOSResourceByID(ctx, *resourceID)
-		if needsReschedule, err := getOSResourceRS.NeedsReschedule(); needsReschedule {
+		osResource, reconcileStatus := actuator.GetOSResourceByID(ctx, *resourceID)
+		if needsReschedule, err := reconcileStatus.NeedsReschedule(); needsReschedule {
 			if orcerrors.IsNotFound(err) {
 				// An OpenStack resource we previously referenced has been deleted unexpectedly. We can't recover from this.
-				return osResource, reconcileStatus.WithError(
+				return osResource, progress.WrapError(
 					orcerrors.Terminal(orcv1alpha1.ConditionReasonUnrecoverableError, "resource has been deleted from OpenStack"))
 			} else {
-				return osResource, getOSResourceRS.WithReconcileStatus(reconcileStatus)
+				return osResource, reconcileStatus
 			}
 		}
 		if osResource != nil {
@@ -87,14 +85,14 @@ func GetOrCreateOSResource[
 
 	// Import by ID
 	if resourceID := objAdapter.GetImportID(); resourceID != nil {
-		osResource, getResourceRS := actuator.GetOSResourceByID(ctx, *resourceID)
-		if needsReschedule, err := getResourceRS.NeedsReschedule(); needsReschedule {
+		osResource, reconcileStatus := actuator.GetOSResourceByID(ctx, *resourceID)
+		if needsReschedule, err := reconcileStatus.NeedsReschedule(); needsReschedule {
 			if orcerrors.IsNotFound(err) {
 				// We assume that a resource imported by ID must already exist. It's a terminal error if it doesn't.
-				return osResource, reconcileStatus.WithError(
+				return osResource, progress.WrapError(
 					orcerrors.Terminal(orcv1alpha1.ConditionReasonUnrecoverableError, "referenced resource does not exist in OpenStack"))
 			} else {
-				return osResource, getResourceRS.WithReconcileStatus(reconcileStatus)
+				return osResource, reconcileStatus
 			}
 		}
 		if osResource != nil {
@@ -105,18 +103,18 @@ func GetOrCreateOSResource[
 
 	// Import by filter
 	if filter := objAdapter.GetImportFilter(); filter != nil {
-		resourceIter, listResourceRS := actuator.ListOSResourcesForImport(ctx, objAdapter.GetObject(), *filter)
-		if needsReschedule, _ := listResourceRS.NeedsReschedule(); needsReschedule {
-			return nil, listResourceRS.WithReconcileStatus(reconcileStatus)
+		resourceIter, reconcileStatus := actuator.ListOSResourcesForImport(ctx, objAdapter.GetObject(), *filter)
+		if needsReschedule, _ := reconcileStatus.NeedsReschedule(); needsReschedule {
+			return nil, reconcileStatus
 		}
 
 		osResource, err := atMostOne(resourceIter, orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "found more than one matching OpenStack resource during import"))
 		if err != nil {
-			return nil, reconcileStatus.WithError(err)
+			return nil, progress.WrapError(err)
 		}
 
 		if osResource == nil {
-			return nil, progress.WaitingOnOpenStack(reconcileStatus, progress.WaitingOnCreation, externalUpdatePollingPeriod)
+			return nil, progress.WaitingOnOpenStack(progress.WaitingOnCreation, externalUpdatePollingPeriod)
 		}
 		return osResource, reconcileStatus
 	}
@@ -125,17 +123,17 @@ func GetOrCreateOSResource[
 	if objAdapter.GetManagementPolicy() == orcv1alpha1.ManagementPolicyUnmanaged {
 		// We never create an unmanaged resource
 		// API validation should have ensured that one of the above functions returned
-		return nil, reconcileStatus.WithError(
+		return nil, progress.WrapError(
 			orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "Not creating unmanaged resource"))
 	}
 
 	osResource, err := getResourceForAdoption(ctx, actuator, objAdapter)
 	if err != nil {
-		return nil, reconcileStatus.WithError(err)
+		return nil, progress.WrapError(err)
 	}
 	if osResource != nil {
 		log.V(logging.Info).Info("Adopted previously created resource")
-		return osResource, reconcileStatus
+		return osResource, nil
 	}
 
 	log.V(logging.Info).Info("Creating resource")
@@ -183,7 +181,7 @@ func DeleteResource[
 		if f == finalizer {
 			foundFinalizer = true
 		} else {
-			reconcileStatus = progress.WaitingOnFinalizer(reconcileStatus, f)
+			reconcileStatus = reconcileStatus.WaitingOnFinalizer(f)
 		}
 	}
 
@@ -240,7 +238,7 @@ func DeleteResource[
 	}
 
 	// We still need to poll for the deletion of the OpenStack resource
-	return false, osResource, progress.WaitingOnOpenStack(reconcileStatus, progress.WaitingOnDeletion, deletePollingPeriod)
+	return false, osResource, reconcileStatus.WaitingOnOpenStack(progress.WaitingOnDeletion, deletePollingPeriod)
 }
 
 func atMostOne[osResourceT any](resourceIter iter.Seq2[*osResourceT, error], multipleErr error) (*osResourceT, error) {

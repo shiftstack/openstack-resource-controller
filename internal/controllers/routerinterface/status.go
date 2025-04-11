@@ -46,13 +46,15 @@ func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *update
 		return metav1.ConditionFalse, nil
 	}
 
-	reconcileStatus := progress.NewReconcileStatus()
+	var reconcileStatus progress.ReconcileStatus
 	if routerInterface.Spec.Type == orcv1alpha1.RouterInterfaceTypeSubnet {
+		var event progress.WaitingOnEvent
 		if opts.subnet == nil {
-			reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Subnet", string(*routerInterface.Spec.SubnetRef), progress.WaitingOnCreation)
+			event = progress.WaitingOnCreation
 		} else if opts.subnet.Status.ID == nil {
-			reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Subnet", string(*routerInterface.Spec.SubnetRef), progress.WaitingOnReady)
+			event = progress.WaitingOnReady
 		}
+		reconcileStatus = reconcileStatus.WaitingOnObject("Subnet", string(*routerInterface.Spec.SubnetRef), event)
 	}
 
 	available := metav1.ConditionFalse
@@ -60,7 +62,7 @@ func getStatusSummary(routerInterface *orcv1alpha1.RouterInterface, opts *update
 		if opts.port.Status == port.PortStatusActive {
 			available = metav1.ConditionTrue
 		} else {
-			reconcileStatus = progress.WaitingOnOpenStack(reconcileStatus, progress.WaitingOnReady, portStatusPollingPeriod)
+			reconcileStatus = reconcileStatus.WaitingOnOpenStack(progress.WaitingOnReady, portStatusPollingPeriod)
 		}
 	}
 

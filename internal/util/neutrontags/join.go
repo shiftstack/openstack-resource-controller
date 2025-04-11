@@ -64,7 +64,7 @@ func ReconcileTags[orcObjectPT, osResourceT any](
 				return progress.WrapError(err)
 			}
 			// If we updated the tags we need another reconcile to refresh the resource status
-			return progress.NeedsRefresh(progress.NewReconcileStatus())
+			return progress.NeedsRefresh()
 		}
 		return nil
 	}

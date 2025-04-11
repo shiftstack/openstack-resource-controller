@@ -235,16 +235,16 @@ func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependencie
 		return nil, progress.WrapError(err)
 	}
 
-	reconcileStatus := progress.NewReconcileStatus()
+	var reconcileStatus progress.ReconcileStatus
 	depsMap := make(map[string]depTP)
 	for _, depRef := range d.getDependencyRefs(obj) {
 		var dep depTP = new(depT)
 
 		if depErr := k8sClient.Get(ctx, types.NamespacedName{Name: depRef, Namespace: obj.GetNamespace()}, dep); depErr != nil {
 			if apierrors.IsNotFound(depErr) {
-				progress.WaitingOnObject(reconcileStatus, depKind, depRef, progress.WaitingOnCreation)
+				reconcileStatus = reconcileStatus.WaitingOnObject(depKind, depRef, progress.WaitingOnCreation)
 			} else {
-				reconcileStatus.WithError(depErr)
+				reconcileStatus = reconcileStatus.WithError(depErr)
 			}
 
 			continue
@@ -255,13 +255,13 @@ func (d *DeletionGuardDependency[objectTP, _, depTP, _, _, depT]) GetDependencie
 			// it easier to delete incorrectly created objects which never
 			// became ready.
 			if depErr := EnsureFinalizer(ctx, k8sClient, dep, d.finalizer, d.fieldOwner); depErr != nil {
-				reconcileStatus.WithError(depErr)
+				reconcileStatus = reconcileStatus.WithError(depErr)
 				continue
 			}
 
 			depsMap[depRef] = dep
 		} else {
-			progress.WaitingOnObject(reconcileStatus, depKind, depRef, progress.WaitingOnReady)
+			reconcileStatus = reconcileStatus.WaitingOnObject(depKind, depRef, progress.WaitingOnReady)
 		}
 	}
 

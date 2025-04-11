@@ -16,7 +16,7 @@ limitations under the License.
 package status
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -52,23 +52,30 @@ func SetCommonConditions[T any](
 	// - err contains a non-terminal error, so we expect an error backoff
 	// - reconcileStatus does not indicate that we are waiting on some condition
 
+	fmt.Printf("\n\n\nreconcileStatus: %+v", reconcileStatus)
+	fmt.Printf("\n\n\nfoo 1")
 	if needsReschedule, _ := reconcileStatus.NeedsReschedule(); !needsReschedule {
+		fmt.Printf("\n\n\nfoo 2")
 		progressingCondition.
 			WithStatus(metav1.ConditionFalse).
 			WithReason(orcv1alpha1.ConditionReasonSuccess).
 			WithMessage("OpenStack resource is up to date")
 	} else {
+		fmt.Printf("\n\n\nfoo 3")
 		if err := reconcileStatus.EphemeralError(); err != nil {
+			fmt.Printf("\n\n\nfoo 4")
 			progressingCondition.
 				WithStatus(metav1.ConditionTrue).
 				WithReason(orcv1alpha1.ConditionReasonTransientError).
-				WithMessage(errors.Join(err, reconcileStatus.TerminalError()).Error())
+				WithMessage(err.Error())
 		} else if err := reconcileStatus.TerminalError(); err != nil {
+			fmt.Printf("\n\n\nfoo 5")
 			progressingCondition.
 				WithStatus(metav1.ConditionFalse).
 				WithReason(err.Reason).
 				WithMessage(err.Message)
 		} else {
+			fmt.Printf("\n\n\nfoo 6")
 			progressingCondition.
 				WithStatus(metav1.ConditionTrue).
 				WithReason(orcv1alpha1.ConditionReasonProgressing).

@@ -11,11 +11,11 @@ spec:
   managedOptions:
     onDelete: detach
   resource:
-    name: CentOS-Stream-GenericCloud-9-20241209.0.x86_64
+    name: CentOS-Stream-GenericCloud-x86_64-9-20250331.0.x86_64
     content:
       diskFormat: qcow2
       download:
-        url: https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-20241209.0.x86_64.qcow2
+        url: https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-x86_64-9-20250331.0.x86_64.qcow2
         hash:
           algorithm: sha256
-          value: 912218b89cdcd8e62b1207f19b62f4da756b793902d34116758b5ffb02859c5c
+          value: 3fdb00bdd44c8a8f682831e9d234d9ba8c8fc7812f060e5dbc319aaea42c50c7

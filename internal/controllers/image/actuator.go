@@ -287,13 +287,13 @@ func (actuator imageActuator) handleUpload(ctx context.Context, orcObject orcObj
 				return progress.WrapError(err)
 			}
 
-			return progress.WaitingOnOpenStack(nil, progress.WaitingOnReady, externalUpdatePollingPeriod)
+			return progress.WaitingOnOpenStack(progress.WaitingOnReady, externalUpdatePollingPeriod)
 		} else {
 			err := actuator.uploadImageContent(ctx, orcObject, osResource)
 			if err != nil {
 				return progress.WrapError(err)
 			}
-			return progress.NeedsRefresh(nil)
+			return progress.NeedsRefresh()
 		}
 
 	// Error cases
@@ -307,7 +307,7 @@ func (actuator imageActuator) handleUpload(ctx context.Context, orcObject orcObj
 
 	default:
 		log.V(logging.Verbose).Info("Waiting for OpenStack resource to be ACTIVE")
-		return progress.WaitingOnOpenStack(nil, progress.WaitingOnReady, externalUpdatePollingPeriod)
+		return progress.WaitingOnOpenStack(progress.WaitingOnReady, externalUpdatePollingPeriod)
 	}
 }
 

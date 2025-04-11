@@ -90,13 +90,13 @@ func (actuator subnetActuator) ListOSResourcesForImport(ctx context.Context, obj
 			networkKey := client.ObjectKey{Name: string(filter.NetworkRef), Namespace: obj.Namespace}
 			if err := actuator.k8sClient.Get(ctx, networkKey, network); err != nil {
 				if apierrors.IsNotFound(err) {
-					return nil, progress.WaitingOnObject(nil, "Network", networkKey.Name, progress.WaitingOnCreation)
+					return nil, progress.WaitingOnObject("Network", networkKey.Name, progress.WaitingOnCreation)
 				} else {
 					return nil, progress.WrapError(fmt.Errorf("fetching network %s: %w", networkKey.Name, err))
 				}
 			} else {
 				if !orcv1alpha1.IsAvailable(network) || network.Status.ID == nil {
-					return nil, progress.WaitingOnObject(nil, "Network", networkKey.Name, progress.WaitingOnReady)
+					return nil, progress.WaitingOnObject("Network", networkKey.Name, progress.WaitingOnReady)
 				}
 			}
 			networkID = *network.Status.ID
@@ -218,7 +218,7 @@ func (actuator subnetActuator) DeleteResource(ctx context.Context, obj orcObject
 				return progress.WrapError(err)
 			}
 		}
-		return progress.WaitingOnObject(nil, "RouterInterface", routerInterface.GetName(), progress.WaitingOnDeletion)
+		return progress.WaitingOnObject("RouterInterface", routerInterface.GetName(), progress.WaitingOnDeletion)
 	}
 
 	return progress.WrapError(actuator.osClient.DeleteSubnet(ctx, osResource.ID))
@@ -252,7 +252,7 @@ func (actuator subnetActuator) ensureRouterInterface(ctx context.Context, orcObj
 				return progress.WrapError(fmt.Errorf("deleting RouterInterface %s: %w", client.ObjectKeyFromObject(routerInterface), err))
 			}
 		}
-		return progress.WaitingOnObject(nil, "routerinterface", routerInterface.Name, progress.WaitingOnDeletion)
+		return progress.WaitingOnObject("routerinterface", routerInterface.Name, progress.WaitingOnDeletion)
 	}
 
 	// Otherwise create it
@@ -277,7 +277,7 @@ func (actuator subnetActuator) ensureRouterInterface(ctx context.Context, orcObj
 	if err := actuator.k8sClient.Create(ctx, routerInterface); err != nil {
 		return progress.WrapError(fmt.Errorf("creating RouterInterface %s: %w", client.ObjectKeyFromObject(orcObject), err))
 	}
-	return progress.WaitingOnObject(nil, "routerinterface", routerInterface.Name, progress.WaitingOnReady)
+	return progress.WaitingOnObject("routerinterface", routerInterface.Name, progress.WaitingOnReady)
 }
 
 func getRouterInterfaceName(orcObject *orcv1alpha1.Subnet) string {

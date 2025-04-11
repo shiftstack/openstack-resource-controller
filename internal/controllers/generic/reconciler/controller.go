@@ -164,7 +164,6 @@ func (c *Controller[
 	osResourceT,
 ]) reconcileNormal(ctx context.Context, objAdapter interfaces.APIObjectAdapter[orcObjectPT, resourceSpecT, filterT]) (reconcileStatus progress.ReconcileStatus) {
 	log := ctrl.LoggerFrom(ctx)
-	reconcileStatus = progress.NewReconcileStatus()
 
 	// We do this here rather than in a predicate because predicates only cover
 	// a single watch. Doing it here means we cover all sources of
@@ -180,8 +179,9 @@ func (c *Controller[
 
 	// Ensure we always update status
 	defer func() {
+		log.V(1).Info("reconcileStatus before updateStatus", "value", fmt.Sprintf("%+v", reconcileStatus))
 		reconcileStatus = reconcileStatus.WithReconcileStatus(
-			status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource))
+			status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource, reconcileStatus))
 	}()
 
 	actuator, actuatorRS := c.helperFactory.NewCreateActuator(ctx, objAdapter.GetObject(), c)
@@ -193,6 +193,7 @@ func (c *Controller[
 	}
 
 	osResource, getOSResourceRS := GetOrCreateOSResource(ctx, log, c, objAdapter, actuator)
+	log.V(1).Info("reconcileStatus", "value", fmt.Sprintf("%+v", getOSResourceRS))
 	if needsReschedule, err := getOSResourceRS.NeedsReschedule(); needsReschedule {
 		if err == nil {
 			log.V(logging.Verbose).Info("Waiting on events before creation")
@@ -251,7 +252,7 @@ func (c *Controller[
 		// No point updating status after removing the finalizer
 		if !deleted {
 			reconcileStatus = reconcileStatus.WithReconcileStatus(
-				status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource))
+				status.UpdateStatus(ctx, c, c.statusWriter, objAdapter.GetObject(), osResource, reconcileStatus))
 		}
 	}()
 

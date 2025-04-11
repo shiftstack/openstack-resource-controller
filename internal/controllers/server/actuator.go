@@ -128,12 +128,12 @@ func (actuator serverActuator) CreateResource(ctx context.Context, obj *orcv1alp
 		flavorKey := client.ObjectKey{Name: string(resource.FlavorRef), Namespace: obj.Namespace}
 		if err := actuator.k8sClient.Get(ctx, flavorKey, flavor); err != nil {
 			if apierrors.IsNotFound(err) {
-				reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Flavor", flavorKey.Name, progress.WaitingOnCreation)
+				reconcileStatus = reconcileStatus.WaitingOnObject("Flavor", flavorKey.Name, progress.WaitingOnCreation)
 			} else {
 				return nil, reconcileStatus.WithError(fmt.Errorf("fetching flavor %s: %w", flavorKey.Name, err))
 			}
 		} else if !orcv1alpha1.IsAvailable(flavor) || flavor.Status.ID == nil {
-			reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Flavor", flavorKey.Name, progress.WaitingOnReady)
+			reconcileStatus = reconcileStatus.WaitingOnObject("Flavor", flavorKey.Name, progress.WaitingOnReady)
 		}
 	}
 
@@ -171,9 +171,9 @@ func (actuator serverActuator) CreateResource(ctx context.Context, obj *orcv1alp
 		secretKey := client.ObjectKey{Name: string(*resource.UserData.SecretRef), Namespace: obj.Namespace}
 		if err := actuator.k8sClient.Get(ctx, secretKey, secret); err != nil {
 			if !apierrors.IsNotFound(err) {
-				reconcileStatus.WithError(fmt.Errorf("fetching secret %s: %w", secretKey.Name, err))
+				reconcileStatus = reconcileStatus.WithError(fmt.Errorf("fetching secret %s: %w", secretKey.Name, err))
 			} else {
-				reconcileStatus = progress.WaitingOnObject(reconcileStatus, "Secret", secretKey.Name, progress.WaitingOnCreation)
+				reconcileStatus = reconcileStatus.WaitingOnObject("Secret", secretKey.Name, progress.WaitingOnCreation)
 			}
 		} else {
 			var ok bool
@@ -234,13 +234,18 @@ func (actuator serverActuator) GetResourceReconcilers(ctx context.Context, orcOb
 func (serverActuator) checkStatus(ctx context.Context, orcObject orcObjectPT, osResource *osResourceT) progress.ReconcileStatus {
 	log := ctrl.LoggerFrom(ctx)
 
-	if osResource.Status == ServerStatusError {
+	switch osResource.Status {
+	case ServerStatusError:
 		return progress.WrapError(
 			orcerrors.Terminal(orcv1alpha1.ConditionReasonUnrecoverableError, "Server is in ERROR state"))
-	}
 
-	log.V(logging.Verbose).Info("Waiting for OpenStack resource to be ACTIVE")
-	return progress.WaitingOnOpenStack(nil, progress.WaitingOnReady, serverActivePollingPeriod)
+	case ServerStatusActive:
+		return nil
+
+	default:
+		log.V(logging.Verbose).Info("Waiting for OpenStack resource to be ACTIVE")
+		return progress.NewReconcileStatus().WaitingOnOpenStack(progress.WaitingOnReady, serverActivePollingPeriod)
+	}
 }
 
 type serverHelperFactory struct{}

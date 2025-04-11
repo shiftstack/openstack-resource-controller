@@ -240,7 +240,7 @@ orcRules:
 
 	// If we added or removed any rules above, schedule another reconcile so we can observe the updated security group
 	if len(ruleCreateOpts) > 0 || len(deleteRuleIDs) > 0 {
-		return progress.NeedsRefresh(nil)
+		return progress.NeedsRefresh()
 	}
 
 	return nil

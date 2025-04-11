@@ -18,6 +18,7 @@ package status
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,6 +81,7 @@ func UpdateStatus[
 	controller interfaces.ResourceController,
 	statusWriter interfaces.ResourceStatusWriter[orcObjectPT, osResourcePT, objectApplyPT, statusApplyPT],
 	orcObject orcObjectPT, osResource osResourcePT,
+	reconcileStatus progress.ReconcileStatus,
 ) progress.ReconcileStatus {
 	log := ctrl.LoggerFrom(ctx)
 	now := metav1.NewTime(time.Now())
@@ -94,8 +96,14 @@ func UpdateStatus[
 		statusWriter.ApplyResourceStatus(log, osResource, applyConfigStatus)
 	}
 
+	fmt.Printf("\n\n\n1 reconcileStatus: %+v", reconcileStatus)
+
 	// Set common conditions
-	available, reconcileStatus := statusWriter.ResourceAvailableStatus(orcObject, osResource)
+	available, availableReconcileStatus := statusWriter.ResourceAvailableStatus(orcObject, osResource)
+	reconcileStatus = reconcileStatus.WithReconcileStatus(availableReconcileStatus)
+
+	fmt.Printf("\n\n\n2 reconcileStatus: %+v", reconcileStatus)
+
 	SetCommonConditions(orcObject, applyConfigStatus, available, reconcileStatus, now)
 
 	// Patch orcObject with the status transaction
