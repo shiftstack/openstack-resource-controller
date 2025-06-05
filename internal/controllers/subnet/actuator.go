@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"iter"
 	"reflect"
+	"slices"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
@@ -382,22 +383,11 @@ func handleHostRoutesUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSp
 }
 
 func handleDNSNameserversUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	missingNameserver := false
 	nameservers := make([]string, len(resource.DNSNameservers))
 	for i := range resource.DNSNameservers {
 		nameservers[i] = string(resource.DNSNameservers[i])
-		found := false
-		for _, nameserver := range osResource.DNSNameservers {
-			if nameserver == nameservers[i] {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missingNameserver = true
-		}
 	}
-	if missingNameserver || len(resource.DNSNameservers) != len(osResource.DNSNameservers) {
+	if !slices.Equal(osResource.DNSNameservers, nameservers) {
 		updateOpts.DNSNameservers = &nameservers
 	}
 }
