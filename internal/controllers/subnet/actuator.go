@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"iter"
 	"reflect"
-	"slices"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
@@ -284,15 +283,15 @@ func (actuator subnetActuator) updateResource(ctx context.Context, obj orcObject
 			orcerrors.Terminal(orcv1alpha1.ConditionReasonInvalidConfiguration, "Update requested, but spec.resource is not set"))
 	}
 
-	updateOpts := subnets.UpdateOpts{}
-
-	handleNameUpdate(&updateOpts, obj, osResource)
-	handleDescriptionUpdate(&updateOpts, resource, osResource)
-	handleAllocationPoolsUpdate(&updateOpts, resource, osResource)
-	handleHostRoutesUpdate(&updateOpts, resource, osResource)
-	handleDNSNameserversUpdate(&updateOpts, resource, osResource)
-	handleEnableDHCPUpdate(&updateOpts, resource, osResource)
-	handleGatewayUpdate(&updateOpts, resource, osResource)
+	updateOpts := subnets.UpdateOpts{
+		Name:            update(osResource.Name, getResourceName(obj)),
+		Description:     update(osResource.Description, string(ptr.Deref(resource.Description, ""))),
+		AllocationPools: updateAllocationPools(osResource, resource),
+		HostRoutes:      updateHostRoutes(osResource, resource),
+		DNSNameservers:  updateDNSNameservers(osResource, resource),
+		EnableDHCP:      update(osResource.EnableDHCP, ptr.Deref(resource.EnableDHCP, true)),
+		GatewayIP:       updateGateway(osResource, resource),
+	}
 
 	// Note that we didn't make dnsPublishFixedIP mutable as it could constantly try to reconcile in some environments
 	// as seen in https://github.com/k-orc/openstack-resource-controller/issues/189
@@ -318,137 +317,67 @@ func (actuator subnetActuator) updateResource(ctx context.Context, obj orcObject
 	return progress.NeedsRefresh()
 }
 
-func handleNameUpdate(updateOpts *subnets.UpdateOpts, obj orcObjectPT, osResource *osResourceT) {
-	name := getResourceName(obj)
-	if osResource.Name != name {
-		updateOpts.Name = &name
+func updateAllocationPools(osResource *osResourceT, resource *resourceSpecT) []subnets.AllocationPool {
+	updateSlice := make([]subnets.AllocationPool, len(resource.AllocationPools))
+	for i := range updateSlice {
+		updateSlice[i] = subnets.AllocationPool{
+			Start: string(resource.AllocationPools[i].Start),
+			End:   string(resource.AllocationPools[i].End),
+		}
 	}
+
+	equalFunc := func(v1, v2 subnets.AllocationPool) bool {
+		return v1.Start == v2.Start && v1.End == v2.End
+	}
+	if upd := updateSetFunc(osResource.AllocationPools, updateSlice, equalFunc); upd != nil {
+		return *upd
+	}
+	return nil
 }
 
-func handleDescriptionUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	description := string(ptr.Deref(resource.Description, ""))
-	if osResource.Description != description {
-		updateOpts.Description = &description
+func updateHostRoutes(osResource *osResourceT, resource *resourceSpecT) *[]subnets.HostRoute {
+	updateSlice := make([]subnets.HostRoute, len(resource.HostRoutes))
+	for i := range updateSlice {
+		updateSlice[i] = subnets.HostRoute{
+			DestinationCIDR: string(resource.HostRoutes[i].Destination),
+			NextHop:         string(resource.HostRoutes[i].NextHop),
+		}
 	}
+
+	equalFunc := func(v1, v2 subnets.HostRoute) bool {
+		return v1.DestinationCIDR == v2.DestinationCIDR && v1.NextHop == v2.NextHop
+	}
+	return updateSetFunc(osResource.HostRoutes, updateSlice, equalFunc)
 }
 
-func handleAllocationPoolsUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	missingAllocationPool := false
-	allocationPools := make([]subnets.AllocationPool, len(resource.AllocationPools))
-	for i := range resource.AllocationPools {
-		allocationPools[i].Start = string(resource.AllocationPools[i].Start)
-		allocationPools[i].End = string(resource.AllocationPools[i].End)
-
-		found := false
-		for _, pool := range osResource.AllocationPools {
-			if pool.Start == allocationPools[i].Start &&
-				pool.End == allocationPools[i].End {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missingAllocationPool = true
-		}
-	}
-
-	extraAllocationPool := false
-	for i := range osResource.AllocationPools {
-		found := false
-		for _, pool := range allocationPools {
-			if pool.Start == osResource.AllocationPools[i].Start &&
-				pool.End == osResource.AllocationPools[i].End {
-				found = true
-				break
-			}
-		}
-		if !found {
-			extraAllocationPool = true
-		}
-	}
-
-	// If the spec doesn't set allocation pools, we'll get a default one and should not try to update it.
-	if len(resource.AllocationPools) > 0 && (missingAllocationPool || extraAllocationPool) {
-		updateOpts.AllocationPools = allocationPools
-	}
-}
-
-func handleHostRoutesUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	missingHostRoute := false
-	hostRoutes := make([]subnets.HostRoute, len(resource.HostRoutes))
-	for i := range resource.HostRoutes {
-		hostRoutes[i].DestinationCIDR = string(resource.HostRoutes[i].Destination)
-		hostRoutes[i].NextHop = string(resource.HostRoutes[i].NextHop)
-
-		found := false
-		for _, route := range osResource.HostRoutes {
-			if route.DestinationCIDR == hostRoutes[i].DestinationCIDR &&
-				route.NextHop == hostRoutes[i].NextHop {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missingHostRoute = true
-		}
-	}
-
-	extraHostRoute := false
-	for i := range osResource.HostRoutes {
-		found := false
-		for _, route := range hostRoutes {
-			if route.DestinationCIDR == osResource.HostRoutes[i].DestinationCIDR &&
-				route.NextHop == osResource.HostRoutes[i].NextHop {
-				found = true
-				break
-			}
-		}
-		if !found {
-			extraHostRoute = true
-		}
-	}
-
-	if missingHostRoute || extraHostRoute {
-		updateOpts.HostRoutes = &hostRoutes
-	}
-}
-
-func handleDNSNameserversUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	nameservers := make([]string, len(resource.DNSNameservers))
+func updateDNSNameservers(osResource *osResourceT, resource *resourceSpecT) *[]string {
+	updateSlice := make([]string, len(resource.DNSNameservers))
 	for i := range resource.DNSNameservers {
-		nameservers[i] = string(resource.DNSNameservers[i])
+		updateSlice[i] = string(resource.DNSNameservers[i])
 	}
 
 	// Let's not bother about potential duplicate entries: they will be rejected by neutron API
-	if !slices.Equal(osResource.DNSNameservers, nameservers) {
-		updateOpts.DNSNameservers = &nameservers
-	}
+	return updateVector(osResource.DNSNameservers, updateSlice)
 }
 
-func handleEnableDHCPUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	// Default is true
-	enableDHCP := ptr.Deref(resource.EnableDHCP, true)
-	if osResource.EnableDHCP != enableDHCP {
-		updateOpts.EnableDHCP = &enableDHCP
+func updateGateway(osResource *osResourceT, resource *resourceSpecT) *string {
+	if resource.Gateway == nil {
+		return nil
 	}
-}
-
-func handleGatewayUpdate(updateOpts *subnets.UpdateOpts, resource *resourceSpecT, osResource *osResourceT) {
-	if resource.Gateway != nil {
-		switch resource.Gateway.Type {
-		case orcv1alpha1.SubnetGatewayTypeAutomatic:
-			// Nothing to do
-		case orcv1alpha1.SubnetGatewayTypeNone:
-			if osResource.GatewayIP != "" {
-				updateOpts.GatewayIP = ptr.To("")
-			}
-		case orcv1alpha1.SubnetGatewayTypeIP:
-			fallthrough
-		default:
-			if osResource.GatewayIP != string(ptr.Deref(resource.Gateway.IP, "")) {
-				updateOpts.GatewayIP = (*string)(resource.Gateway.IP)
-			}
+	switch resource.Gateway.Type {
+	case orcv1alpha1.SubnetGatewayTypeAutomatic:
+		return nil
+	case orcv1alpha1.SubnetGatewayTypeNone:
+		if osResource.GatewayIP != "" {
+			return ptr.To("")
 		}
+	case orcv1alpha1.SubnetGatewayTypeIP:
+		fallthrough
+	default:
+		if osResource.GatewayIP != string(ptr.Deref(resource.Gateway.IP, "")) {
+			return (*string)(resource.Gateway.IP)
+		}
+		return nil
 	}
 }
 
