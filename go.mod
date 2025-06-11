@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/gophercloud/gophercloud/v2 v2.3.0
 	github.com/gophercloud/utils/v2 v2.0.0-20241209100706-e3a3b7c07d26
@@ -12,10 +12,10 @@ require (
 	github.com/onsi/gomega v1.37.0
 	github.com/ulikunitz/xz v0.5.12
 	go.uber.org/mock v0.5.2
-	k8s.io/api v0.31.8
-	k8s.io/apimachinery v0.31.8
-	k8s.io/client-go v0.31.8
-	k8s.io/code-generator v0.31.8
+	k8s.io/api v0.31.9
+	k8s.io/apimachinery v0.31.9
+	k8s.io/client-go v0.31.9
+	k8s.io/code-generator v0.31.9
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340
 	k8s.io/utils v0.0.0-20240711033017-18e509b52bc8
