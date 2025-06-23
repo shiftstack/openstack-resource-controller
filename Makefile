@@ -3,7 +3,7 @@ IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
 TRIVY_VERSION = 0.49.1
-GO_VERSION ?= 1.23.9
+GO_VERSION ?= 1.23.10
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -248,7 +248,7 @@ GOVULNCHECK = $(LOCALBIN)/govulncheck
 KUSTOMIZE_VERSION ?= v5.4.2
 CONTROLLER_TOOLS_VERSION ?= v0.16.4
 ENVTEST_VERSION ?= release-0.18
-GOLANGCI_LINT_VERSION ?= v1.61.0
+GOLANGCI_LINT_VERSION ?= v1.64.8
 MOCKGEN_VERSION ?= v0.4.0
 GOVULNCHECK_VERSION ?= v1.1.4
 
