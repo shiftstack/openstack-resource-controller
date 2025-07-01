@@ -3,17 +3,13 @@
 aliases:
   openstack-approvers:
     - dkokkino
-    - EmilienM
     - gryf
-    - MaysaMacedo
     - mandre
-    - mdbooth
+    - pierreprinetti
     - stephenfin
   openstack-reviewers:
     - dkokkino
-    - EmilienM
     - gryf
-    - MaysaMacedo
     - mandre
-    - mdbooth
+    - pierreprinetti
     - stephenfin
